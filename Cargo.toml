@@ -1,0 +1,10 @@
+[package]
+name = "mirisa"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mira Ciel Nekomimi-Sireneva <miranekomimisireneva@gmail.com>"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+pest = "2.7.7"
+pest_derive = "2.7.7"

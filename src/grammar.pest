@@ -1,0 +1,202 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+
+COMMENT = _{ "--" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+
+keywords = {
+    "var"
+  | "const"
+  | "unit"
+  | "never"
+  | "end"
+  | "function"
+  | "include"
+  | "as"
+  | "do"
+  | "then"
+  | "if"
+  | "elseif"
+  | "else"
+  | "while"
+  | "begin"
+  | "structure"
+  | "variants"
+  | "union"
+  | "type"
+  | "return"
+  | "break"
+  | "continue"
+  | "effect"
+  | "try"
+  | "handle"
+  | "resume"
+  | primitive_type
+}
+
+identifier = @{ !keywords ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+integer = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+float = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+
+char   = ${ "'" ~ char_c ~ "'" }
+char_c =  {
+    !("\"" | "\\") ~ ANY
+  | "\\" ~ ("'" | "\\" | "0" | "e" | "r" | "t" | "n")
+  | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
+  | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
+}
+
+string = ${ "\"" ~ inner ~ "\"" }
+inner  = @{ char_s* }
+char_s =  {
+    !("\"" | "\\") ~ ANY
+  | "\\" ~ ("\"" | "\\" | "0" | "e" | "r" | "t" | "n")
+  | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
+  | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
+}
+
+unit = { "unit" }
+
+literal = _{ integer | float | char | string | unit }
+
+primitive_type = @{
+    ("i" | "u") ~ ("8" | "16")
+  | ("i" | "u" | "f") ~ ("32" | "64")
+  | "char"
+  | "unit"
+  | "never"
+}
+
+structure_entry = { identifier ~ ":" ~ mirisa_type }
+
+structure = { "structure" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+
+variants = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
+
+union = { "union" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+
+operation = { identifier ~ "(" ~ (mirisa_type ~ ("," ~ mirisa_type)*)? ~ ")" ~ mirisa_type }
+
+effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
+
+primary_type = _{ primitive_type | identifier | structure | variants | union }
+
+pointer = { "*" ~ "const"? }
+
+array_t = { "[" ~ (integer)? ~ "]" }
+
+type_modifier = _{ pointer+ | array_t+ }
+
+mirisa_type = { type_modifier? ~ primary_type }
+
+array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
+
+primary_expression = _{ literal | identifier | array | "(" ~ expression ~ ")" }
+
+call = { "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+
+indexing = { "[" ~ expression ~ "]" }
+
+field_access = { "." ~ identifier }
+
+field_deref = { "->" ~ identifier }
+
+expression_postfix = { call | indexing }
+
+expression_level_bottom = { primary_expression ~ expression_postfix* }
+
+op_level_prefix = { "!" | "*" | "&" }
+
+expression_level_prefix = { op_level_prefix* ~ expression_level_bottom }
+
+expression_level_as = { expression_level_prefix ~ ("as" ~ mirisa_type)* }
+
+op_level_mul = { "*" | "/" | "%" }
+
+expression_level_mul = { expression_level_as ~ (op_level_mul ~ expression_level_as)* }
+
+op_level_add = { "+" | "-" }
+
+expression_level_add = { expression_level_mul ~ (op_level_add ~ expression_level_mul)* }
+
+op_level_comp = { "=" | "/=" | ("<" | ">") ~ "="? }
+
+expression_level_comp = { expression_level_add ~ (op_level_comp ~ expression_level_add)* }
+
+expression = { expression_level_comp }
+
+declaration_type = { "const" | "var" }
+
+declaration = { declaration_type ~ identifier ~ ":" ~ mirisa_type ~ "=" ~ expression }
+
+op = _{ op_level_comp | op_level_add | op_level_mul }
+
+reassignment_op = @{ (op | ":") ~ "=" }
+
+reassignment_postfix = _{ indexing | field_access | field_deref }
+
+lexpression = { "*"* ~ identifier ~ reassignment_postfix* | "(" ~ lexpression ~ ")" }
+
+reassignment = { lexpression ~ reassignment_op ~ expression }
+
+body = { statement* }
+
+if_then = { "then" ~ body }
+
+if_elseif = { "elseif" ~ expression ~ "then" ~ body }
+
+if_else = { "else" ~ body }
+
+mirisa_if = {
+    "if" ~ expression ~ if_then ~ if_elseif* ~ if_else? ~ "end"
+}
+
+mirisa_while = {
+    "while" ~ expression ~ "do" ~ body ~ "end"
+}
+
+handler_args = { (identifier ~ ("," ~ identifier)*)? }
+
+handler = {
+    identifier ~ "(" ~ handler_args ~ ")" ~ body ~ "end"
+}
+
+handle = { "handle" ~ identifier ~ handler* }
+
+try = { "try" ~ body ~ handle+ ~ "end" }
+
+block = { "begin" ~ body ~ "end" }
+
+typedef = { "type" ~ identifier ~ "=" ~ mirisa_type }
+
+mirisa_return = { "return" ~ expression }
+
+statement = {
+    declaration
+  | reassignment
+  | mirisa_if
+  | mirisa_while
+  | try
+  | block
+  | expression
+  | typedef
+  | mirisa_return
+  | "break"
+  | "continue"
+}
+
+function_args = { (identifier ~ ":" ~ mirisa_type ~ ("," ~ identifier ~ ":" ~ mirisa_type)*)? }
+
+effect_set = { "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}" }
+
+function = {
+    "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ mirisa_type ~ ("&" ~ effect_set)? ~ "do" ~ body ~ "end"
+}
+
+include_path = ${ (ASCII_ALPHANUMERIC | "\\ ")+ ~ ("/" ~ (ASCII_ALPHANUMERIC | "\\ ")+)* }
+
+include = { "include" ~ include_path }
+
+item = _{ include | declaration | typedef | effect | function }
+
+program = { item* ~ &EOI }
