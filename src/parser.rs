@@ -5,7 +5,7 @@ use pest_derive::Parser;
 #[grammar = "grammar.pest"]
 struct MirisaParser;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedPrimitiveType {
 	I8,
 	U8,
@@ -21,7 +21,7 @@ pub enum ParsedPrimitiveType {
 	Unit
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedPrimaryType<'a> {
 	Primitive(ParsedPrimitiveType),
 	Identifier(&'a str),
@@ -29,20 +29,20 @@ pub enum ParsedPrimaryType<'a> {
 	Union(&'a str, Box<ParsedExpression<'a>>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedTypeModifier {
 	Pointer,
 	PointerToConst,
 	Array(Option<u64>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedType<'a> {
 	pub(crate) modifiers: Vec<ParsedTypeModifier>,
 	pub(crate) primary_type: ParsedPrimaryType<'a>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedLiteral<'a> {
 	Integer(i128),
 	Float(f64),
@@ -50,7 +50,7 @@ pub enum ParsedLiteral<'a> {
 	String(&'a str)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedPrimaryExpression<'a> {
 	Literal(ParsedLiteral<'a>),
 	Identifier(&'a str),
@@ -60,7 +60,7 @@ pub enum ParsedPrimaryExpression<'a> {
 	Union(Vec<(&'a str, ParsedType<'a>)>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionPostfix<'a> {
 	Call(Vec<ParsedLexpression<'a>>),
 	Indexing(ParsedLexpression<'a>),
@@ -68,56 +68,56 @@ pub enum ParsedExpressionPostfix<'a> {
 	FieldDereference(&'a str)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedExpressionLevelBottom<'a> {
 	pub(crate) expression: ParsedPrimaryExpression<'a>,
 	pub(crate) postfixes: Vec<ParsedExpressionPostfix<'a>>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedOpLevelPrefix {
 	Neg,
 	Ref
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelPrefix<'a> {
 	LowerLevel(ParsedExpressionLevelBottom<'a>),
 	Operator(ParsedExpressionLevelBottom<'a>, ParsedExpressionLevelBottom<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelAs<'a> {
 	LowerLevel(ParsedExpressionLevelPrefix<'a>),
 	Operator(ParsedExpressionLevelPrefix<'a>, ParsedType<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedOpLevelMul {
 	Div,
 	Mul,
 	Rem
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelMul<'a> {
 	LowerLevel(ParsedExpressionLevelAs<'a>),
 	Operator(ParsedOpLevelMul, ParsedExpressionLevelAs<'a>, ParsedExpressionLevelAs<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedOpLevelAdd {
 	Add,
 	Sub
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelAdd<'a> {
 	LowerLevel(ParsedExpressionLevelMul<'a>),
 	Operator(ParsedOpLevelAdd, ParsedExpressionLevelMul<'a>, ParsedExpressionLevelMul<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedOpLevelComp {
 	Eq,
 	Ne,
@@ -127,19 +127,19 @@ pub enum ParsedOpLevelComp {
 	Ge
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelComp<'a> {
 	LowerLevel(ParsedExpressionLevelAdd<'a>),
 	Operator(ParsedOpLevelComp, ParsedExpressionLevelAdd<'a>, ParsedExpressionLevelAdd<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelAnd<'a> {
 	LowerLevel(ParsedExpressionLevelAdd<'a>),
 	Operator(ParsedExpressionLevelAdd<'a>, ParsedExpressionLevelAdd<'a>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedExpressionLevelOr<'a> {
 	LowerLevel(ParsedExpressionLevelAnd<'a>),
 	Operator(ParsedExpressionLevelAnd<'a>, ParsedExpressionLevelAnd<'a>)
@@ -147,7 +147,7 @@ pub enum ParsedExpressionLevelOr<'a> {
 
 type ParsedExpression<'a> = ParsedExpressionLevelOr<'a>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedDeclaration<'a> {
 	pub(crate) is_const: bool,
 	pub(crate) name: &'a str,
@@ -155,22 +155,22 @@ pub struct ParsedDeclaration<'a> {
 	pub(crate) value: ParsedExpression<'a>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedTypeDeclaration<'a> {
 	pub(crate) name: &'a str,
 	pub(crate) declaration_type: ParsedType<'a>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedLexpression<'a> {
 	Identifier(&'a str),
 	Dereference(Box<ParsedLexpression<'a>>),
-	Indexing(Box<(ParsedLexpression<'a>)>, Box<ParsedExpression<'a>>),
-	FieldAccess(Box<(ParsedLexpression<'a>)>, &'a str),
-	FieldDereference(Box<(ParsedLexpression<'a>)>, &'a str),
+	Indexing(Box<ParsedLexpression<'a>>, Box<ParsedExpression<'a>>),
+	FieldAccess(Box<ParsedLexpression<'a>>, &'a str),
+	FieldDereference(Box<ParsedLexpression<'a>>, &'a str),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedReassignmentOp {
 	Comp(ParsedOpLevelComp),
 	Add(ParsedOpLevelAdd),
@@ -179,53 +179,53 @@ pub enum ParsedReassignmentOp {
 	Or
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedReassignment<'a> {
 	pub(crate) lexpression: ParsedLexpression<'a>,
 	pub(crate) reassignment_op: ParsedReassignmentOp,
 	pub(crate) value: ParsedExpression<'a>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedIf<'a> {
 	pub(crate) condition: Option<ParsedExpression<'a>>,
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedWhile<'a> {
 	pub(crate) condition: Option<ParsedExpression<'a>>,
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedFor<'a> {
-	pub(crate) init: Option<ParsedStatement<'a>>,
+	pub(crate) init: Option<Box<ParsedStatement<'a>>>,
 	pub(crate) condition: Option<ParsedExpression<'a>>,
-	pub(crate) with: Option<ParsedStatement<'a>>,
+	pub(crate) with: Option<Box<ParsedStatement<'a>>>,
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedOperationHandler<'a> {
 	pub(crate) operation: &'a str,
 	pub(crate) arguments: Vec<&'a str>,
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedHandler<'a> {
 	pub(crate) effect: &'a str,
 	pub(crate) handlers: Vec<ParsedOperationHandler<'a>>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedTry<'a> {
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 	pub(crate) handlers: Vec<ParsedHandler<'a>>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedStatement<'a> {
 	Declaration(ParsedDeclaration<'a>),
 	TypeDeclaration(ParsedTypeDeclaration<'a>),
@@ -241,23 +241,23 @@ pub enum ParsedStatement<'a> {
  	Continue
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedInclude<'a>(pub(crate) &'a str);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedOperation<'a> {
 	pub(crate) name: &'a str,
 	pub(crate) provides_types: Vec<(&'a str, ParsedType<'a>)>,
 	pub(crate) resume_type: ParsedType<'a>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedEffect<'a> {
 	pub(crate) name: &'a str,
 	pub(crate) operations: Vec<ParsedOperation<'a>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedFunction<'a> {
 	name: &'a str,
 	arguments: Vec<(&'a str, ParsedType<'a>)>,
@@ -266,7 +266,7 @@ pub struct ParsedFunction<'a> {
 	body: Vec<ParsedStatement<'a>>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParsedItem<'a> {
 	Include(ParsedInclude<'a>),
 	Declaration(ParsedDeclaration<'a>),
@@ -275,5 +275,5 @@ pub enum ParsedItem<'a> {
 	Function(ParsedFunction<'a>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParsedProgram<'a>(pub(crate) Vec<ParsedItem<'a>>);
