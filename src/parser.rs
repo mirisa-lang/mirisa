@@ -19,6 +19,7 @@ pub enum ParsedPrimitiveType {
 	I64,
 	U64,
 	F64,
+	Usize,
 	Char,
 	Unit
 }
@@ -36,6 +37,7 @@ impl From<&str> for ParsedPrimitiveType {
 			"i64" => Self::I64,
 			"u64" => Self::U64,
 			"f64" => Self::F64,
+			"usize" => Self::Usize,
 			"char" => Self::Char,
 			"unit" => Self::Unit,
 			_ => unreachable!()
@@ -408,13 +410,41 @@ pub struct ParsedReassignment<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedIf<'a> {
-	pub(crate) condition: Option<ParsedExpression<'a>>,
-	pub(crate) body: Vec<ParsedStatement<'a>>,
+	pub(crate) condition: ParsedExpression<'a>,
+	pub(crate) then: Vec<ParsedStatement<'a>>,
+	pub(crate) elseifs: Vec<(ParsedExpression<'a>, Vec<ParsedStatement<'a>>)>,
+	pub(crate) else_body: Option<Vec<ParsedStatement<'a>>>,
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedIf<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let condition = ParsedExpression::from(source.next().unwrap().into_inner());
+		let then = source.next().unwrap().into_inner().map(|statement|
+			ParsedStatement::from(statement.into_inner().next().unwrap().into_inner().next().unwrap())
+		).collect();
+		let mut elseifs = Vec::new();
+		for branch in source {
+			match branch.as_rule() {
+				Rule::if_elseif => {
+					let mut inner = branch.into_inner();
+					let expression = ParsedExpression::from(inner.next().unwrap().into_inner());
+					let body = inner.next().unwrap().into_inner().map(|statement| ParsedStatement::from(statement.into_inner().next().unwrap())).collect();
+					elseifs.push((expression, body))
+				},
+				Rule::if_else => return Self { condition, then, elseifs, else_body: Some(
+					branch.into_inner().next().unwrap().into_inner().map(|statement| ParsedStatement::from(statement.into_inner().next().unwrap())).collect()
+				) },
+				_ => unreachable!()
+			};
+		}
+		let elseifs = elseifs;
+		Self { condition, then, elseifs, else_body: None }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedWhile<'a> {
-	pub(crate) condition: Option<ParsedExpression<'a>>,
+	pub(crate) condition: ParsedExpression<'a>,
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
@@ -464,6 +494,7 @@ pub enum ParsedStatement<'a> {
 impl<'a> From<Pair<'a, Rule>> for ParsedStatement<'a> {
 	fn from(source: Pair<'a, Rule>) -> Self {
 		match source.as_rule() {
+			Rule::mirisa_if => Self::If(ParsedIf::from(source.into_inner())),
 			Rule::expression_level_or => Self::Expression(ParsedExpression::from(source.into_inner())),
 			Rule::mirisa_return => Self::Return(ParsedExpression::from(source.into_inner().next().unwrap().into_inner())),
 			_ => todo!("ParsedStatement: {:?}", source)

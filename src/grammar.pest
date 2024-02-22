@@ -66,6 +66,7 @@ literal = { integer | float | char | string }
 primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
   | ("i" | "u" | "f") ~ ("32" | "64")
+  | "usize"
   | "char"
   | "unit"
 }
