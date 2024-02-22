@@ -1,4 +1,4 @@
-WHITESPACE = _{ " " | "\t" | NEWLINE }
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 COMMENT = _{ "--" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
@@ -10,6 +10,8 @@ keywords = {
   | "end"
   | "function"
   | "include"
+  | "not"
+  | "ref"
   | "as"
   | "and"
   | "or"
@@ -59,7 +61,7 @@ char_s =  {
   | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
 }
 
-literal = _{ integer | float | char | string }
+literal = { integer | float | char | string }
 
 primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
@@ -80,7 +82,7 @@ operation = { identifier ~ "(" ~ (mirisa_type ~ ("," ~ mirisa_type)*)? ~ ")" ~ m
 
 effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
 
-primary_type = _{ primitive_type | identifier | structure_type | variants_type | union_type }
+primary_type = { primitive_type | identifier | structure_type | variants_type | union_type }
 
 pointer = { "*" ~ "const"? }
 
@@ -114,7 +116,7 @@ expression_postfix = { call | indexing | dereference }
 
 expression_level_bottom = { primary_expression ~ expression_postfix* }
 
-op_level_prefix = { "!" | "&" }
+op_level_prefix = { "not" | "ref" }
 
 expression_level_prefix = { op_level_prefix* ~ expression_level_bottom }
 
@@ -136,7 +138,9 @@ expression_level_and = { expression_level_comp ~ ("and" ~ expression_level_comp)
 
 expression_level_or = { expression_level_and ~ ("or" ~ expression_level_and)* }
 
-expression = { expression_level_or }
+expression = _{ expression_level_or }
+
+include = { "include" ~ include_path }
 
 declaration_type = { "const" | "var" }
 
@@ -144,7 +148,7 @@ declaration = { declaration_type ~ identifier ~ ":" ~ mirisa_type ~ ("=" ~ expre
 
 type_declaration = { "type" ~ identifier ~ "=" ~ mirisa_type }
 
-op = _{ op_level_comp | op_level_add | op_level_mul }
+op = _{ op_level_add | op_level_mul }
 
 reassignment_op = @{ (op | ":") ~ "=" }
 
@@ -203,18 +207,18 @@ statement = {
   | "continue"
 }
 
-function_args = { (identifier ~ ":" ~ mirisa_type ~ ("," ~ identifier ~ ":" ~ mirisa_type)*)? }
+function_arg = { identifier ~ ":" ~ mirisa_type }
 
-effect_set = { "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}" }
+function_args = { (function_arg ~ ("," ~ function_arg)*)? }
+
+effect_set = { ("&" ~ "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}")? }
 
 function = {
-    "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ mirisa_type ~ ("&" ~ effect_set)? ~ "do" ~ body ~ "end"
+    "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ mirisa_type ~ effect_set ~ "do" ~ body ~ "end"
 }
 
 include_path = ${ (ASCII_ALPHANUMERIC | "\\ ")+ ~ ("/" ~ (ASCII_ALPHANUMERIC | "\\ ")+)* }
 
-include = { "include" ~ include_path }
-
 item = _{ include | declaration | type_declaration | effect | function }
 
-program = { item* ~ &EOI }
+program = _{ SOI ~ item* ~ &EOI }
