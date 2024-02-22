@@ -11,12 +11,16 @@ keywords = {
   | "function"
   | "include"
   | "as"
+  | "and"
+  | "or"
   | "do"
   | "then"
   | "if"
   | "elseif"
   | "else"
   | "while"
+  | "for"
+  | "with"
   | "begin"
   | "structure"
   | "variants"
@@ -55,31 +59,28 @@ char_s =  {
   | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
 }
 
-unit = { "unit" }
-
-literal = _{ integer | float | char | string | unit }
+literal = _{ integer | float | char | string }
 
 primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
   | ("i" | "u" | "f") ~ ("32" | "64")
   | "char"
   | "unit"
-  | "never"
 }
 
-structure_entry = { identifier ~ ":" ~ mirisa_type }
+structure_type_entry = { identifier ~ ":" ~ mirisa_type }
 
-structure = { "structure" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+structure_type = { "structure" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
 
-variants = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
+variants_type = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
 
-union = { "union" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+union_type = { "union" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
 
 operation = { identifier ~ "(" ~ (mirisa_type ~ ("," ~ mirisa_type)*)? ~ ")" ~ mirisa_type }
 
 effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
 
-primary_type = _{ primitive_type | identifier | structure | variants | union }
+primary_type = _{ primitive_type | identifier | structure_type | variants_type | union_type }
 
 pointer = { "*" ~ "const"? }
 
@@ -91,7 +92,13 @@ mirisa_type = { type_modifier? ~ primary_type }
 
 array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 
-primary_expression = _{ literal | identifier | array | "(" ~ expression ~ ")" }
+structure_entry = { identifier ~ "=" ~ expression }
+
+structure = { "structure" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+
+union = { "union" ~ structure_entry ~ "end" }
+
+primary_expression = _{ literal | identifier | array | structure | union | "(" ~ expression ~ ")" }
 
 call = { "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
@@ -99,13 +106,15 @@ indexing = { "[" ~ expression ~ "]" }
 
 field_access = { "." ~ identifier }
 
-field_deref = { "->" ~ identifier }
+field_dereference = { "->" ~ identifier }
 
-expression_postfix = { call | indexing }
+dereference = { "." ~ "*" }
+
+expression_postfix = { call | indexing | dereference }
 
 expression_level_bottom = { primary_expression ~ expression_postfix* }
 
-op_level_prefix = { "!" | "*" | "&" }
+op_level_prefix = { "!" | "&" }
 
 expression_level_prefix = { op_level_prefix* ~ expression_level_bottom }
 
@@ -123,19 +132,25 @@ op_level_comp = { "=" | "/=" | ("<" | ">") ~ "="? }
 
 expression_level_comp = { expression_level_add ~ (op_level_comp ~ expression_level_add)* }
 
-expression = { expression_level_comp }
+expression_level_and = { expression_level_comp ~ ("and" ~ expression_level_comp)* }
+
+expression_level_or = { expression_level_and ~ ("or" ~ expression_level_and)* }
+
+expression = { expression_level_or }
 
 declaration_type = { "const" | "var" }
 
-declaration = { declaration_type ~ identifier ~ ":" ~ mirisa_type ~ "=" ~ expression }
+declaration = { declaration_type ~ identifier ~ ":" ~ mirisa_type ~ ("=" ~ expression)? }
+
+type_declaration = { "type" ~ identifier ~ "=" ~ mirisa_type }
 
 op = _{ op_level_comp | op_level_add | op_level_mul }
 
 reassignment_op = @{ (op | ":") ~ "=" }
 
-reassignment_postfix = _{ indexing | field_access | field_deref }
+reassignment_postfix = _{ indexing | dereference | field_access | field_dereference }
 
-lexpression = { "*"* ~ identifier ~ reassignment_postfix* | "(" ~ lexpression ~ ")" }
+lexpression = { identifier ~ reassignment_postfix* | "(" ~ lexpression ~ ")" }
 
 reassignment = { lexpression ~ reassignment_op ~ expression }
 
@@ -155,31 +170,34 @@ mirisa_while = {
     "while" ~ expression ~ "do" ~ body ~ "end"
 }
 
+mirisa_for = {
+    "for" ~ statement? ~ "while" ~ expression? ~ "with" ~ statement? ~ "do" ~ body ~ "end"
+}
+
 handler_args = { (identifier ~ ("," ~ identifier)*)? }
 
-handler = {
+operation_handler = {
     identifier ~ "(" ~ handler_args ~ ")" ~ body ~ "end"
 }
 
-handle = { "handle" ~ identifier ~ handler* }
+handler = { "handle" ~ identifier ~ operation_handler* }
 
-try = { "try" ~ body ~ handle+ ~ "end" }
+try = { "try" ~ body ~ handler+ ~ "end" }
 
 block = { "begin" ~ body ~ "end" }
-
-typedef = { "type" ~ identifier ~ "=" ~ mirisa_type }
 
 mirisa_return = { "return" ~ expression }
 
 statement = {
     declaration
+  | type_declaration
   | reassignment
   | mirisa_if
   | mirisa_while
+  | mirisa_for
   | try
   | block
   | expression
-  | typedef
   | mirisa_return
   | "break"
   | "continue"
@@ -197,6 +215,6 @@ include_path = ${ (ASCII_ALPHANUMERIC | "\\ ")+ ~ ("/" ~ (ASCII_ALPHANUMERIC | "
 
 include = { "include" ~ include_path }
 
-item = _{ include | declaration | typedef | effect | function }
+item = _{ include | declaration | type_declaration | effect | function }
 
 program = { item* ~ &EOI }
