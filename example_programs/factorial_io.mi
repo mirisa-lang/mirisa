@@ -1,0 +1,17 @@
+include stdio
+
+function factorial(n: i32) i32 do
+    if n = 0 then return 1
+    else return n * factorial(n - 1) end
+end
+
+function main() i32 do
+    var num: int
+
+    printf("Enter an integer: ")
+    scanf("%d", &num)
+
+    printf("%d! = %d\n", num, factorial(num))
+
+    return 0
+end

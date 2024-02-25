@@ -1,0 +1,19 @@
+include stdio
+
+effect Exception
+    throw(*char) unit
+end
+
+function main() i32 do
+    try
+        puts("say gex")
+        throw("error occurred")
+        puts("not printed")
+    handle Exception
+        throw(msg)
+            printf("exception threw: %s\n", msg)
+            return 0
+        end
+    end
+    return 0
+end

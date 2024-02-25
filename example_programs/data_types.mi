@@ -1,0 +1,25 @@
+type ColorVariant = variants
+    red,
+    green,
+    blue
+end
+
+type Tag = variants
+    color,
+    rgb
+end
+
+type Color = structure
+    tag: Tag,
+    color: union
+        color: ColorVariant,
+        rgb: u16
+    end
+end
+
+function rgb_from_variant(color: ColorVariant) u16 do
+    if color = red then return 0xf800
+    elseif color = green then return 0x07e0
+    elseif color = blue then return 0x001f
+    end
+end

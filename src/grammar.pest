@@ -11,7 +11,6 @@ keywords = {
   | "function"
   | "include"
   | "not"
-  | "ref"
   | "as"
   | "and"
   | "or"
@@ -21,8 +20,6 @@ keywords = {
   | "elseif"
   | "else"
   | "while"
-  | "for"
-  | "with"
   | "begin"
   | "structure"
   | "variants"
@@ -49,7 +46,6 @@ char_c =  {
     !("\"" | "\\") ~ ANY
   | "\\" ~ ("'" | "\\" | "0" | "e" | "r" | "t" | "n")
   | "\\" ~ ("x" ~ ASCII_HEX_DIGIT{2})
-  | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
 }
 
 string = ${ "\"" ~ inner ~ "\"" }
@@ -61,7 +57,9 @@ char_s =  {
   | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{6})
 }
 
-literal = { integer | float | char | string }
+unit = { "unit" }
+
+literal = { integer | float | char | string | unit }
 
 primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
@@ -79,7 +77,9 @@ variants_type = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
 
 union_type = { "union" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
 
-operation = { identifier ~ "(" ~ (mirisa_type ~ ("," ~ mirisa_type)*)? ~ ")" ~ mirisa_type }
+operation_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
+
+operation = { identifier ~ "(" ~  operation_args ~ ")" ~ mirisa_type }
 
 effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
 
@@ -87,7 +87,7 @@ primary_type = { primitive_type | identifier | structure_type | variants_type | 
 
 pointer = { "*" ~ "const"? }
 
-array_t = { "[" ~ (integer)? ~ "]" }
+array_t = { "[" ~ integer? ~ "]" }
 
 type_modifier = _{ pointer+ | array_t+ }
 
@@ -109,15 +109,13 @@ indexing = { "[" ~ expression ~ "]" }
 
 field_access = { "." ~ identifier }
 
-field_dereference = { "->" ~ identifier }
-
 dereference = { "." ~ "*" }
 
-expression_postfix = { call | indexing | dereference }
+expression_postfix = { call | indexing | field_access | dereference }
 
 expression_level_bottom = { primary_expression ~ expression_postfix* }
 
-op_level_prefix = { "not" | "ref" }
+op_level_prefix = { "not" | "&" }
 
 expression_level_prefix = { op_level_prefix* ~ expression_level_bottom }
 
@@ -153,9 +151,11 @@ op = _{ op_level_add | op_level_mul }
 
 reassignment_op = @{ (op | ":") ~ "=" }
 
-reassignment_postfix = _{ indexing | dereference | field_access | field_dereference }
+reassignment_postfix = _{ indexing | dereference | field_access }
 
-lexpression = { identifier ~ reassignment_postfix* | "(" ~ lexpression ~ ")" }
+lexpression_inner = { identifier ~ reassignment_postfix* }
+
+lexpression = { lexpression_inner | "(" ~ lexpression ~ ")" }
 
 reassignment = { lexpression ~ reassignment_op ~ expression }
 
@@ -175,8 +175,8 @@ mirisa_while = {
     "while" ~ expression ~ "do" ~ body ~ "end"
 }
 
-mirisa_for = {
-    "for" ~ statement? ~ "while" ~ expression? ~ "with" ~ statement? ~ "do" ~ body ~ "end"
+do_while = {
+    "do" ~ body ~ "while" ~ expression ~ "end"
 }
 
 handler_args = { (identifier ~ ("," ~ identifier)*)? }
@@ -187,11 +187,15 @@ operation_handler = {
 
 handler = { "handle" ~ identifier ~ operation_handler* }
 
-try = { "try" ~ body ~ handler+ ~ "end" }
+mirisa_try = { "try" ~ body ~ handler+ ~ "end" }
 
 block = { "begin" ~ body ~ "end" }
 
 mirisa_return = { "return" ~ expression }
+
+mirisa_break = { "break" }
+
+mirisa_continue = { "continue" }
 
 statement = {
     declaration
@@ -199,13 +203,13 @@ statement = {
   | reassignment
   | mirisa_if
   | mirisa_while
-  | mirisa_for
-  | try
+  | do_while
+  | mirisa_try
   | block
   | expression
   | mirisa_return
-  | "break"
-  | "continue"
+  | mirisa_break
+  | mirisa_continue
 }
 
 function_arg = { identifier ~ ":" ~ mirisa_type }

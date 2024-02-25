@@ -49,8 +49,9 @@ impl From<&str> for ParsedPrimitiveType {
 pub enum ParsedPrimaryType<'a> {
 	Primitive(ParsedPrimitiveType),
 	Identifier(&'a str),
-	Structure(Vec<(&'a str, ParsedExpression<'a>)>),
-	Union(&'a str, Box<ParsedExpression<'a>>)
+	Structure(Vec<(&'a str, ParsedType<'a>)>),
+	Variants(Vec<&'a str>),
+	Union(Vec<(&'a str, ParsedType<'a>)>)
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
@@ -58,7 +59,22 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
 		match source.as_rule() {
 			Rule::primitive_type => Self::Primitive(ParsedPrimitiveType::from(source.as_str())),
 			Rule::identifier => Self::Identifier(source.as_str()),
-			_ => todo!("ParsedPrimaryType: {:?}", source)
+			Rule::structure_type => Self::Structure(source.into_inner().map(|entry| {
+				let mut inner = entry.into_inner();
+				let entry_name = inner.next().unwrap().as_str().trim();
+				let entry_type = ParsedType::from(inner.next().unwrap().into_inner());
+				(entry_name, entry_type)
+			}).collect()),
+			Rule::variants_type => Self::Variants(source.into_inner().map(|variant|
+				variant.as_str().trim()
+			).collect()),
+			Rule::union_type => Self::Union(source.into_inner().map(|entry| {
+				let mut inner = entry.into_inner();
+				let entry_name = inner.next().unwrap().as_str().trim();
+				let entry_type = ParsedType::from(inner.next().unwrap().into_inner());
+				(entry_name, entry_type)
+			}).collect()),
+			_ => unreachable!()
 		}
 	}
 }
@@ -81,12 +97,12 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedType<'a> {
 		let mut modifiers = Vec::new();
 		for pair in source {
 			match pair.as_rule() {
-				Rule::pointer => modifiers.push(match pair.as_str() {
+				Rule::pointer => modifiers.push(match pair.as_str().trim() {
 					"*" => ParsedTypeModifier::Pointer,
 					"*const" => ParsedTypeModifier::PointerToConst,
 					_ => unreachable!()
 				}),
-				Rule::array_t => todo!("ParsedType: {:?}", pair),
+				Rule::array_t => modifiers.push(ParsedTypeModifier::Array(pair.into_inner().next().and_then(|size| size.as_str().trim().parse().ok()))),
 				Rule::primary_type => {
 					let mut result = Self::PrimaryType(ParsedPrimaryType::from(pair.into_inner().next().unwrap()));
 					for modifier in modifiers.into_iter().rev() {
@@ -106,16 +122,28 @@ pub enum ParsedLiteral<'a> {
 	Integer(i128),
 	Float(f64),
 	Char(i8),
-	String(&'a str)
+	String(&'a str),
+	Unit
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedLiteral<'a> {
 	fn from(source: Pair<'a, Rule>) -> Self {
 		match source.as_rule() {
-			Rule::integer => Self::Integer(source.as_str().parse().unwrap()),
-			Rule::float => Self::Float(source.as_str().parse().unwrap()),
-			Rule::char => Self::Char(source.as_str().as_bytes()[0] as i8),
+			Rule::integer => Self::Integer(source.as_str().trim().parse().unwrap()),
+			Rule::float => Self::Float(source.as_str().trim().parse().unwrap()),
+			Rule::char => Self::Char( match source.into_inner().next().unwrap().as_str().trim() {
+				"\\'" => '\'' as i8,
+				"\\\\" => '\\' as i8,
+				"\\0" => '\0' as i8,
+				"\\e" => '\x1b' as i8,
+				"\\r" => '\r' as i8,
+				"\\t" => '\t' as i8,
+				"\\n" => '\n' as i8,
+				x if x.len() == 4 && &x[0..2] == "\\x" => i8::from_str_radix(&x[2..4], 16).unwrap(),
+				c => c.bytes().next().unwrap() as i8
+			}),
 			Rule::string => Self::String(source.into_inner().next().unwrap().as_str()),
+			Rule::unit => Self::Unit,
 			_ => unreachable!()
 		}
 	}
@@ -126,9 +154,9 @@ pub enum ParsedPrimaryExpression<'a> {
 	Literal(ParsedLiteral<'a>),
 	Identifier(&'a str),
 	Array(Vec<ParsedExpression<'a>>),
-	Expression(Box<ParsedExpression<'a>>),
-	Structure(Vec<(&'a str, ParsedType<'a>)>),
-	Union(Vec<(&'a str, ParsedType<'a>)>)
+	Structure(Vec<(&'a str, ParsedExpression<'a>)>),
+	Union(Vec<(&'a str, ParsedExpression<'a>)>),
+	Expression(Box<ParsedExpression<'a>>)
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryExpression<'a> {
@@ -136,10 +164,22 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryExpression<'a> {
 		match source.as_rule() {
 			Rule::literal => Self::Literal(ParsedLiteral::from(source.into_inner().next().unwrap())),
 			Rule::identifier => Self::Identifier(source.as_str()),
-			Rule::array => todo!("ParsedPrimaryExpression: {:?}", source),
-			Rule::expression_level_or => todo!("ParsedPrimaryExpression: {:?}", source),
-			Rule::structure => todo!("ParsedPrimaryExpression: {:?}", source),
-			Rule::union => todo!("ParsedPrimaryExpression: {:?}", source),
+			Rule::array => Self::Array(source.into_inner().map(|entry|
+				ParsedExpression::from(entry.into_inner())
+			).collect()),
+			Rule::structure => Self::Structure(source.into_inner().map(|entry| {
+				let mut inner = entry.into_inner();
+				let entry_name = inner.next().unwrap().as_str().trim();
+				let entry_type = ParsedExpression::from(inner.next().unwrap().into_inner());
+				(entry_name, entry_type)
+			}).collect()),
+			Rule::union => Self::Union(source.into_inner().map(|entry| {
+				let mut inner = entry.into_inner();
+				let entry_name = inner.next().unwrap().as_str().trim();
+				let entry_type = ParsedExpression::from(inner.next().unwrap().into_inner());
+				(entry_name, entry_type)
+			}).collect()),
+			Rule::expression_level_or => Self::Expression(Box::new(ParsedExpression::from(source.into_inner()))),
 			_ => unreachable!()
 		}
 	}
@@ -149,15 +189,16 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryExpression<'a> {
 pub enum ParsedExpressionPostfix<'a> {
 	Call(Vec<ParsedExpression<'a>>),
 	Indexing(Box<ParsedExpression<'a>>),
-	FieldAccess(&'a str),
-	FieldDereference(&'a str)
+	FieldAccess(&'a str)
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedExpressionPostfix<'a> {
 	fn from(source: Pair<'a, Rule>) -> Self {
 		match source.as_rule() {
 			Rule::call => Self::Call(source.into_inner().map(|argument| ParsedExpression::from(argument.into_inner())).collect()),
-			_ => todo!("ParsedExpressionPostfix: {:?}", source)
+			Rule::indexing => Self::Indexing(Box::new(ParsedExpression::from(source.into_inner().next().unwrap().into_inner()))),
+			Rule::field_access => Self::FieldAccess(source.into_inner().next().unwrap().as_str().trim()),
+			_ => unreachable!()
 		}
 	}
 }
@@ -174,7 +215,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedExpressionLevelBottom<'a> {
 		for postfix in source.map(|postfix| postfix.into_inner().next().unwrap()) {
 			result = Self::Postfix(Box::new(result), ParsedExpressionPostfix::from(postfix));
 		}
-		return result;
+		result
 	}
 }
 
@@ -195,9 +236,9 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedExpressionLevelPrefix<'a> {
 		let mut prefixes = Vec::new();
 		for pair in source {
 			match pair.as_rule() {
-				Rule::op_level_prefix => prefixes.push(match pair.as_str() {
+				Rule::op_level_prefix => prefixes.push(match pair.as_str().trim() {
 					"not" => ParsedOpLevelPrefix::Neg,
-					"ref" => ParsedOpLevelPrefix::Ref,
+					"&" => ParsedOpLevelPrefix::Ref,
 					_ => unreachable!()
 				}),
 				Rule::expression_level_bottom => {
@@ -247,7 +288,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedExpressionLevelMul<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
 		let mut result = Self::LevelAs(ParsedExpressionLevelAs::from(source.next().unwrap().into_inner()));
 		while source.len() != 0 {
-			let op = match source.next().unwrap().as_str() {
+			let op = match source.next().unwrap().as_str().trim() {
 				"*" => ParsedOpLevelMul::Mul,
 				"/" => ParsedOpLevelMul::Div,
 				"%" => ParsedOpLevelMul::Rem,
@@ -275,7 +316,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedExpressionLevelAdd<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
 		let mut result = Self::LevelMul(ParsedExpressionLevelMul::from(source.next().unwrap().into_inner()));
 		while source.len() != 0 {
-			let op = match source.next().unwrap().as_str() {
+			let op = match source.next().unwrap().as_str().trim() {
 				"+" => ParsedOpLevelAdd::Add,
 				"-" => ParsedOpLevelAdd::Sub,
 				_ => unreachable!()
@@ -306,7 +347,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedExpressionLevelComp<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
 		let mut result = Self::LevelAdd(ParsedExpressionLevelAdd::from(source.next().unwrap().into_inner()));
 		while source.len() != 0 {
-			let op = match source.next().unwrap().as_str() {
+			let op = match source.next().unwrap().as_str().trim() {
 				"=" => ParsedOpLevelComp::Eq,
 				"/=" => ParsedOpLevelComp::Ne,
 				"<" => ParsedOpLevelComp::Lt,
@@ -365,12 +406,12 @@ pub struct ParsedDeclaration<'a> {
 
 impl<'a> From<Pairs<'a, Rule>> for ParsedDeclaration<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
-		let is_const = match source.next().unwrap().as_str() {
+		let is_const = match source.next().unwrap().as_str().trim() {
 			"const" => true,
 			"var" => false,
 			_ => unreachable!()
 		};
-		let name = source.next().unwrap().as_str();
+		let name = source.next().unwrap().as_str().trim();
 		let declaration_type = ParsedType::from(source.next().unwrap().into_inner());
 		let value = source.next().map(Pair::into_inner).map(ParsedExpression::from);
 		Self { is_const, name, declaration_type, value }
@@ -383,22 +424,52 @@ pub struct ParsedTypeDeclaration<'a> {
 	pub(crate) declaration_type: ParsedType<'a>
 }
 
+impl<'a> From<Pairs<'a, Rule>> for ParsedTypeDeclaration<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let name = source.next().unwrap().as_str().trim();
+		let declaration_type = ParsedType::from(source.next().unwrap().into_inner());
+		Self { name, declaration_type }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedLexpression<'a> {
 	Identifier(&'a str),
 	Dereference(Box<ParsedLexpression<'a>>),
 	Indexing(Box<ParsedLexpression<'a>>, Box<ParsedExpression<'a>>),
-	FieldAccess(Box<ParsedLexpression<'a>>, &'a str),
-	FieldDereference(Box<ParsedLexpression<'a>>, &'a str),
+	FieldAccess(Box<ParsedLexpression<'a>>, &'a str)
+}
+
+impl<'a> From<Pair<'a, Rule>> for ParsedLexpression<'a> {
+	fn from(source: Pair<'a, Rule>) -> Self {
+		match source.as_rule() {
+			Rule::lexpression_inner => {
+				let mut inner = source.into_inner();
+				let mut result = Self::Identifier(inner.next().unwrap().as_str().trim());
+				for postfix in inner {
+					result = match postfix.as_rule() {
+						Rule::dereference => Self::Dereference(Box::new(result)),
+						Rule::indexing => Self::Indexing(Box::new(result), Box::new(ParsedExpression::from(postfix.into_inner()))),
+						Rule::field_access => Self::FieldAccess(Box::new(result), postfix.as_str().trim()),
+						_ => unreachable!()
+					};
+				}
+				result
+			},
+			Rule::lexpression => ParsedLexpression::from(source.into_inner().next().unwrap()),
+			_ => unreachable!()
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedReassignmentOp {
-	Comp(ParsedOpLevelComp),
-	Add(ParsedOpLevelAdd),
-	Mul(ParsedOpLevelMul),
-	And,
-	Or
+	Add,
+	Sub,
+	Mul,
+	Div,
+	Rem,
+	None
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -406,6 +477,23 @@ pub struct ParsedReassignment<'a> {
 	pub(crate) lexpression: ParsedLexpression<'a>,
 	pub(crate) reassignment_op: ParsedReassignmentOp,
 	pub(crate) value: ParsedExpression<'a>
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedReassignment<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let lexpression = ParsedLexpression::from(source.next().unwrap().into_inner().next().unwrap());
+		let reassignment_op = match source.next().unwrap().as_str().trim() {
+			"+=" => ParsedReassignmentOp::Add,
+			"-=" => ParsedReassignmentOp::Sub,
+			"*=" => ParsedReassignmentOp::Mul,
+			"/=" => ParsedReassignmentOp::Div,
+			"%=" => ParsedReassignmentOp::Rem,
+			":=" => ParsedReassignmentOp::None,
+			_ => unreachable!()
+		};
+		let value = ParsedExpression::from(source.next().unwrap().into_inner());
+		Self { lexpression, reassignment_op, value }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -445,15 +533,33 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedIf<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedWhile<'a> {
 	pub(crate) condition: ParsedExpression<'a>,
-	pub(crate) body: Vec<ParsedStatement<'a>>,
+	pub(crate) body: Vec<ParsedStatement<'a>>
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedWhile<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let condition = ParsedExpression::from(source.next().unwrap().into_inner());
+		let body = source.next().unwrap().into_inner().map(|statement|
+			ParsedStatement::from(statement.into_inner().next().unwrap())
+		).collect();
+		Self { condition, body }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ParsedFor<'a> {
-	pub(crate) init: Option<Box<ParsedStatement<'a>>>,
-	pub(crate) condition: Option<ParsedExpression<'a>>,
-	pub(crate) with: Option<Box<ParsedStatement<'a>>>,
+pub struct ParsedDoWhile<'a> {
 	pub(crate) body: Vec<ParsedStatement<'a>>,
+	pub(crate) condition: ParsedExpression<'a>
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedDoWhile<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let body = source.next().unwrap().into_inner().map(|statement|
+			ParsedStatement::from(statement.into_inner().next().unwrap())
+		).collect();
+		let condition = ParsedExpression::from(source.next().unwrap().into_inner());
+		Self { body, condition }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -463,16 +569,51 @@ pub struct ParsedOperationHandler<'a> {
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 }
 
+impl<'a> From<Pairs<'a, Rule>> for ParsedOperationHandler<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let operation = source.next().unwrap().as_str().trim();
+		let arguments = source.next().unwrap().into_inner().map(|handler|
+			handler.as_str().trim()
+		).collect();
+		let body = source.next().unwrap().into_inner().map(|handler|
+			ParsedStatement::from(handler.into_inner().next().unwrap())
+		).collect();
+		Self { operation, arguments, body }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedHandler<'a> {
 	pub(crate) effect: &'a str,
 	pub(crate) handlers: Vec<ParsedOperationHandler<'a>>
 }
 
+impl<'a> From<Pairs<'a, Rule>> for ParsedHandler<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let effect = source.next().unwrap().as_str().trim();
+		let handlers = source.map(|handler|
+			ParsedOperationHandler::from(handler.into_inner())
+		).collect();
+		Self { effect, handlers }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedTry<'a> {
 	pub(crate) body: Vec<ParsedStatement<'a>>,
 	pub(crate) handlers: Vec<ParsedHandler<'a>>
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedTry<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let body = source.next().unwrap().into_inner().map(|statement|
+			ParsedStatement::from(statement.into_inner().next().unwrap())
+		).collect();
+		let handlers = source.map(|handler|
+			ParsedHandler::from(handler.into_inner())
+		).collect();
+		Self { body, handlers }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -482,7 +623,7 @@ pub enum ParsedStatement<'a> {
  	Reassignment(ParsedReassignment<'a>),
  	If(ParsedIf<'a>),
  	While(ParsedWhile<'a>),
-	For(ParsedFor<'a>),
+	DoWhile(ParsedDoWhile<'a>),
  	Try(ParsedTry<'a>),
  	Block(Vec<ParsedStatement<'a>>),
  	Expression(ParsedExpression<'a>),
@@ -494,10 +635,21 @@ pub enum ParsedStatement<'a> {
 impl<'a> From<Pair<'a, Rule>> for ParsedStatement<'a> {
 	fn from(source: Pair<'a, Rule>) -> Self {
 		match source.as_rule() {
+			Rule::declaration => Self::Declaration(ParsedDeclaration::from(source.into_inner())),
+			Rule::type_declaration => Self::TypeDeclaration(ParsedTypeDeclaration::from(source.into_inner())),
+			Rule::reassignment => Self::Reassignment(ParsedReassignment::from(source.into_inner())),
 			Rule::mirisa_if => Self::If(ParsedIf::from(source.into_inner())),
+			Rule::mirisa_while => Self::While(ParsedWhile::from(source.into_inner())),
+			Rule::do_while => Self::DoWhile(ParsedDoWhile::from(source.into_inner())),
+			Rule::mirisa_try => Self::Try(ParsedTry::from(source.into_inner())),
+			Rule::block => Self::Block(source.into_inner().next().unwrap().into_inner().map(|statement|
+				ParsedStatement::from(statement.into_inner().next().unwrap())
+			).collect()),
 			Rule::expression_level_or => Self::Expression(ParsedExpression::from(source.into_inner())),
 			Rule::mirisa_return => Self::Return(ParsedExpression::from(source.into_inner().next().unwrap().into_inner())),
-			_ => todo!("ParsedStatement: {:?}", source)
+			Rule::mirisa_break => Self::Break,
+			Rule::mirisa_continue => Self::Continue,
+			_ => unreachable!()
 		}
 	}
 }
@@ -505,8 +657,19 @@ impl<'a> From<Pair<'a, Rule>> for ParsedStatement<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedOperation<'a> {
 	pub(crate) name: &'a str,
-	pub(crate) provides_types: Vec<(&'a str, ParsedType<'a>)>,
+	pub(crate) provides_types: Vec<ParsedType<'a>>,
 	pub(crate) resume_type: ParsedType<'a>
+}
+
+impl<'a> From<Pairs<'a, Rule>> for ParsedOperation<'a> {
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let name = source.next().unwrap().as_str().trim();
+		let provides_types = source.next().unwrap().into_inner().map(|t|
+			ParsedType::from(t.into_inner())
+		).collect();
+		let resume_type = ParsedType::from(source.next().unwrap().into_inner());
+		Self { name, provides_types, resume_type }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -516,8 +679,12 @@ pub struct ParsedEffect<'a> {
 }
 
 impl<'a> From<Pairs<'a, Rule>> for ParsedEffect<'a> {
-	fn from(source: Pairs<'a, Rule>) -> Self {
-		todo!("ParsedEffect: {:?}", source)
+	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let name = source.next().unwrap().as_str().trim();
+		let operations = source.map(|operation|
+			ParsedOperation::from(operation.into_inner())
+		).collect();
+		Self { name, operations }
 	}
 }
 
@@ -532,10 +699,10 @@ pub struct ParsedFunction<'a> {
 
 impl<'a> From<Pairs<'a, Rule>> for ParsedFunction<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
-		let name = source.next().unwrap().as_str();
+		let name = source.next().unwrap().as_str().trim();
 		let mut arguments = Vec::new();
 		for mut argument in source.next().unwrap().into_inner().map(Pair::into_inner) {
-			let arg_name = argument.next().unwrap().as_str();
+			let arg_name = argument.next().unwrap().as_str().trim();
 			let arg_type = ParsedType::from(argument.next().unwrap().into_inner());
 			arguments.push((arg_name, arg_type));
 		}
@@ -561,7 +728,7 @@ impl<'a> From<Pair<'a, Rule>> for ParsedItem<'a> {
 		match source.as_rule() {
 			Rule::include => Self::Include(source.into_inner().next().unwrap().as_str()),
 			Rule::declaration => Self::Declaration(ParsedDeclaration::from(source.into_inner())),
-			Rule::type_declaration => todo!("{:?}: {:?}", source.as_rule(), source.as_str()),
+			Rule::type_declaration => Self::TypeDeclaration(ParsedTypeDeclaration::from(source.into_inner())),
 			Rule::effect => Self::Effect(ParsedEffect::from(source.into_inner())),
 			Rule::function => Self::Function(ParsedFunction::from(source.into_inner())),
 			_ => unreachable!()
