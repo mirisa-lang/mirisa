@@ -12,7 +12,7 @@ function main() i32 do
     handle Exception
         throw(msg)
             printf("exception threw: %s\n", msg)
-            return 0
+            return 1
         end
     end
     return 0

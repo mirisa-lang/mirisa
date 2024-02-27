@@ -1,6 +1,6 @@
 include stdio
 
-const msg: *const char = "say gex"
+let msg: *char = "say gex"
 
 function main() i32 do
     puts(msg)

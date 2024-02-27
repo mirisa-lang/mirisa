@@ -69,7 +69,7 @@ primitive_type = @{
   | "unit"
 }
 
-structure_type_entry = { identifier ~ ":" ~ mirisa_type }
+structure_type_entry = { identifier ~ ":" ~ mirisa_type_inner }
 
 structure_type = { "structure" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
 
@@ -77,21 +77,25 @@ variants_type = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
 
 union_type = { "union" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
 
-operation_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
+operation_args = { (mirisa_type_inner ~ ("," ~ mirisa_type_inner)*)? }
 
-operation = { identifier ~ "(" ~  operation_args ~ ")" ~ mirisa_type }
+operation = { identifier ~ "(" ~  operation_args ~ ")" ~ mirisa_type_inner }
 
 effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
 
 primary_type = { primitive_type | identifier | structure_type | variants_type | union_type }
 
-pointer = { "*" ~ "const"? }
+pointer = { "*" ~ "mut"? }
 
 array_t = { "[" ~ integer? ~ "]" }
 
 type_modifier = _{ pointer+ | array_t+ }
 
-mirisa_type = { type_modifier? ~ primary_type }
+mirisa_type_inner = { type_modifier? ~ primary_type }
+
+is_mut = { "mut"? }
+
+mirisa_type = { is_mut ~ mirisa_type_inner }
 
 array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 
@@ -141,11 +145,9 @@ expression = _{ expression_level_or }
 
 include = { "include" ~ include_path }
 
-declaration_type = { "const" | "var" }
+declaration = { "let" ~ identifier ~ ":" ~ mirisa_type ~ ("=" ~ expression)? }
 
-declaration = { declaration_type ~ identifier ~ ":" ~ mirisa_type ~ ("=" ~ expression)? }
-
-type_declaration = { "type" ~ identifier ~ "=" ~ mirisa_type }
+type_alias = { "alias" ~ identifier ~ "=" ~ mirisa_type }
 
 op = _{ op_level_add | op_level_mul }
 
@@ -179,7 +181,9 @@ do_while = {
     "do" ~ body ~ "while" ~ expression ~ "end"
 }
 
-handler_args = { (identifier ~ ("," ~ identifier)*)? }
+handler_arg = { is_mut ~ identifier }
+
+handler_args = { (handler_arg ~ ("," ~ handler_arg)*)? }
 
 operation_handler = {
     identifier ~ "(" ~ handler_args ~ ")" ~ body ~ "end"
@@ -199,7 +203,7 @@ mirisa_continue = { "continue" }
 
 statement = {
     declaration
-  | type_declaration
+  | type_alias
   | reassignment
   | mirisa_if
   | mirisa_while
@@ -219,11 +223,11 @@ function_args = { (function_arg ~ ("," ~ function_arg)*)? }
 effect_set = { ("&" ~ "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}")? }
 
 function = {
-    "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ mirisa_type ~ effect_set ~ "do" ~ body ~ "end"
+    "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ mirisa_type_inner ~ effect_set ~ "do" ~ body ~ "end"
 }
 
 include_path = ${ (ASCII_ALPHANUMERIC | "\\ ")+ ~ ("/" ~ (ASCII_ALPHANUMERIC | "\\ ")+)* }
 
-item = _{ include | declaration | type_declaration | effect | function }
+item = _{ include | declaration | type_alias | effect | function }
 
 program = _{ SOI ~ item* ~ &EOI }

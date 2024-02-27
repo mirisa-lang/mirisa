@@ -1,5 +1,5 @@
 function factorial(n: i32) i32 do
-    var res: i32 = 1
+    let res: mut i32 = 1
     while n > 0 do
         res *= n
         n -= 1
