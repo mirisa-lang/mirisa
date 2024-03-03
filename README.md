@@ -1,6 +1,6 @@
 # mirisa (early WIP)
 
-Well… it's just an unfinished PoC c with algebraic effects to regular c translator for now…
+Well… it's just an unfinished PoC c with algebraic effects and cute syntax to c translator for now…
 
 ## License
 

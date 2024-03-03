@@ -2,7 +2,7 @@ include stdio
 
 let msg: *char = "say gex"
 
-function main() i32 do
+function main() -> i32 do
     puts(msg)
     return 0
 end

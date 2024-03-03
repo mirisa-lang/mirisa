@@ -1,10 +1,10 @@
 include stdio
 
 effect Exception
-    throw(*char) unit
+    throw(*char) -> unit
 end
 
-function main() i32 do
+function main() -> i32 do
     try
         puts("say gex")
         throw("error occurred")

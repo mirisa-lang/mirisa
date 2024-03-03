@@ -1,4 +1,4 @@
-function factorial(n: i32) i32 do
+function factorial(n: i32) -> i32 do
     if n = 0 then return 1
     elseif n = 1 then return 1
     else return n * factorial(n - 1) end

@@ -19,6 +19,7 @@ pub enum AstTypeInner<'a> {
 	Structure(Vec<(&'a str, AstTypeInner<'a>)>),
 	Variants(Vec<&'a str>),
 	Union(Vec<(&'a str, AstTypeInner<'a>)>),
+	Function(Vec<AstTypeInner<'a>>, Box<AstTypeInner<'a>>, Vec<&'a str>),
 	Pointer(Box<AstType<'a>>),
 	Array(Option<u64>, Box<AstTypeInner<'a>>)
 }
@@ -52,7 +53,12 @@ impl<'a> From<parser::ParsedPrimaryType<'a>> for AstTypeInner<'a> {
 			ParsedPrimaryType::Identifier(identifier) => Self::Identifier(identifier),
 			ParsedPrimaryType::Structure(structure) => Self::Structure(structure.into_iter().map(|(name, r#type)| (name, AstTypeInner::from(r#type))).collect()),
 			ParsedPrimaryType::Variants(variants) => Self::Variants(variants),
-			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstTypeInner::from(r#type))).collect())
+			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstTypeInner::from(r#type))).collect()),
+			ParsedPrimaryType::Function(args, return_type, effect_set) => Self::Function(
+				args.into_iter().map(AstTypeInner::from).collect(),
+				Box::new(AstTypeInner::from(*return_type)),
+				effect_set
+			)
 		}
 	}
 }
@@ -463,8 +469,9 @@ impl<'a> From<parser::ParsedFunction<'a>> for AstFunction<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstProgram<'a> {
 	pub includes: Vec<&'a str>,
+	pub extern_declarations: Vec<(&'a str, AstTypeInner<'a>)>,
 	pub declarations: Vec<AstDeclaration<'a>>,
-	pub type_alias: Vec<AstTypeAlias<'a>>,
+	pub type_aliases: Vec<AstTypeAlias<'a>>,
 	pub effects: Vec<AstEffect<'a>>,
 	pub functions: Vec<AstFunction<'a>>
 }
@@ -472,20 +479,22 @@ pub struct AstProgram<'a> {
 impl<'a> From<parser::ParsedProgram<'a>> for AstProgram<'a> {
 	fn from(cst: parser::ParsedProgram<'a>) -> Self {
 		let mut includes = Vec::new();
+		let mut extern_declarations = Vec::new();
 		let mut declarations = Vec::new();
-		let mut type_alias = Vec::new();
+		let mut type_aliases = Vec::new();
 		let mut effects = Vec::new();
 		let mut functions = Vec::new();
 		for item in cst.0 {
 			use parser::ParsedItem;
 			match item {
 				ParsedItem::Include(path) => includes.push(path),
+				ParsedItem::ExternDeclaration(name, r#type) => extern_declarations.push((name, AstTypeInner::from(r#type))),
 				ParsedItem::Declaration(declaration) => declarations.push(AstDeclaration::from(declaration)),
-				ParsedItem::TypeAlias(declaration) => type_alias.push(AstTypeAlias::from(declaration)),
+				ParsedItem::TypeAlias(declaration) => type_aliases.push(AstTypeAlias::from(declaration)),
 				ParsedItem::Effect(effect) => effects.push(AstEffect::from(effect)),
 				ParsedItem::Function(function) => functions.push(AstFunction::from(function)),
 			};
 		}
-		Self { includes, declarations, type_alias, effects, functions }
+		Self { includes, extern_declarations, declarations, type_aliases, effects, functions }
 	}
 }
