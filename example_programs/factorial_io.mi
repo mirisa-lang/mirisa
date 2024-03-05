@@ -6,7 +6,7 @@ function factorial(n: i32) -> i32 do
 end
 
 function main() -> i32 do
-    let num: mut int
+    let mutable num: i32
 
     printf("Enter an integer: ")
     scanf("%d", &num)

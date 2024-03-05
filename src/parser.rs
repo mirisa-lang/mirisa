@@ -707,7 +707,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedFunction<'a> {
 		let name = source.next().unwrap().as_str().trim();
 		let mut arguments = Vec::new();
 		for mut argument in source.next().unwrap().into_inner().map(Pair::into_inner) {
-			let arg_is_mut = source.next().unwrap().as_str().trim() == "mutable";
+			let arg_is_mut = argument.next().unwrap().as_str().trim() == "mutable";
 			let arg_name = argument.next().unwrap().as_str().trim();
 			let arg_type = ParsedType::from(argument.next().unwrap().into_inner());
 			arguments.push((arg_is_mut, arg_name, arg_type));

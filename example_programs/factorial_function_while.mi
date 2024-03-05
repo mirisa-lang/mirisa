@@ -1,7 +1,8 @@
-function factorial(n: i32) -> i32 do
-    let res: mutable i32 = 1
+function factorial(mutable n: i32) -> i32 do
+    let mutable res: i32 = 1
     while n > 0 do
         res *= n
         n -= 1
     end
+    return res
 end
