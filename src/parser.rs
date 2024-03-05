@@ -52,7 +52,7 @@ pub enum ParsedPrimaryType<'a> {
 	Structure(Vec<(&'a str, ParsedType<'a>)>),
 	Variants(Vec<&'a str>),
 	Union(Vec<(&'a str, ParsedType<'a>)>),
-	Function(Vec<ParsedType<'a>>, Box<ParsedType<'a>>, Vec<&'a str>)
+	Function(Option<Vec<ParsedType<'a>>>, Box<ParsedType<'a>>, Vec<&'a str>)
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
@@ -77,7 +77,10 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
 			}).collect()),
 			Rule::function_type => {
 				let mut inner = source.into_inner();
-				let args = inner.next().unwrap().into_inner().map(|r#type| ParsedType::from(r#type.into_inner())).collect();
+				let args = match inner.next().unwrap() {
+					a if a.as_str().trim() == "..." => None,
+					a => Some(a.into_inner().map(|r#type| ParsedType::from(r#type.into_inner())).collect())
+				};
 				let return_type = Box::new(ParsedType::from(inner.next().unwrap().into_inner()));
 				let effect_set = inner.next().unwrap().into_inner().map(|effect| effect.as_str()).collect();
 				Self::Function(args, return_type, effect_set)
@@ -116,7 +119,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedType<'a> {
 					}
 					return result;
 				},
-				_ => unreachable!("{:?}", pair)
+				_ => unreachable!()
 			}
 		}
 		unreachable!()

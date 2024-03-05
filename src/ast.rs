@@ -19,7 +19,7 @@ pub enum AstType<'a> {
 	Structure(Vec<(&'a str, AstType<'a>)>),
 	Variants(Vec<&'a str>),
 	Union(Vec<(&'a str, AstType<'a>)>),
-	Function(Vec<AstType<'a>>, Box<AstType<'a>>, Vec<&'a str>),
+	Function(Option<Vec<AstType<'a>>>, Box<AstType<'a>>, Vec<&'a str>),
 	Pointer(bool, Box<AstType<'a>>),
 	Array(Option<u64>, Box<AstType<'a>>)
 }
@@ -55,7 +55,7 @@ impl<'a> From<parser::ParsedPrimaryType<'a>> for AstType<'a> {
 			ParsedPrimaryType::Variants(variants) => Self::Variants(variants),
 			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect()),
 			ParsedPrimaryType::Function(args, return_type, effect_set) => Self::Function(
-				args.into_iter().map(AstType::from).collect(),
+				args.map(|a| a.into_iter().map(AstType::from).collect()),
 				Box::new(AstType::from(*return_type)),
 				effect_set
 			)

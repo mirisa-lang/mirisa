@@ -86,7 +86,9 @@ effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
 
 function_type_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
 
-function_type = { "function" ~ "(" ~ function_type_args ~ ")" ~ "->" ~ mirisa_type ~ effect_set }
+varargs = { "..." }
+
+function_type = { "function" ~ "(" ~ (varargs | function_type_args) ~ ")" ~ "->" ~ mirisa_type ~ effect_set }
 
 primary_type = { primitive_type | identifier | structure_type | variants_type | union_type | function_type }
 
