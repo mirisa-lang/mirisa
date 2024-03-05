@@ -17,14 +17,14 @@ alias Color = structure
     end
 end
 
-function rgb_from_variant(color: ColorVariant) u16 do
+function rgb_from_variant(color: ColorVariant) -> u16 do
     if color = red then return 63488
     elseif color = green then return 2016
     elseif color = blue then return 31
     end
 end
 
-function rgbize(color: Color) Color do
+function rgbize(color: Color) -> Color do
     if color.tag = Tag_color then
         return structure
             tag = Tag_rgb,

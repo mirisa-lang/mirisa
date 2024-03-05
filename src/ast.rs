@@ -1,7 +1,7 @@
 use crate::parser;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AstTypeInner<'a> {
+pub enum AstType<'a> {
 	I8,
 	U8,
 	I16,
@@ -16,15 +16,15 @@ pub enum AstTypeInner<'a> {
 	Char,
 	Unit,
 	Identifier(&'a str),
-	Structure(Vec<(&'a str, AstTypeInner<'a>)>),
+	Structure(Vec<(&'a str, AstType<'a>)>),
 	Variants(Vec<&'a str>),
-	Union(Vec<(&'a str, AstTypeInner<'a>)>),
-	Function(Vec<AstTypeInner<'a>>, Box<AstTypeInner<'a>>, Vec<&'a str>),
-	Pointer(Box<AstType<'a>>),
-	Array(Option<u64>, Box<AstTypeInner<'a>>)
+	Union(Vec<(&'a str, AstType<'a>)>),
+	Function(Vec<AstType<'a>>, Box<AstType<'a>>, Vec<&'a str>),
+	Pointer(bool, Box<AstType<'a>>),
+	Array(Option<u64>, Box<AstType<'a>>)
 }
 
-impl From<parser::ParsedPrimitiveType> for AstTypeInner<'_> {
+impl From<parser::ParsedPrimitiveType> for AstType<'_> {
 	fn from(cst: parser::ParsedPrimitiveType) -> Self {
 		use parser::ParsedPrimitiveType;
 		match cst {
@@ -45,48 +45,33 @@ impl From<parser::ParsedPrimitiveType> for AstTypeInner<'_> {
 	}
 }
 
-impl<'a> From<parser::ParsedPrimaryType<'a>> for AstTypeInner<'a> {
+impl<'a> From<parser::ParsedPrimaryType<'a>> for AstType<'a> {
 	fn from(cst: parser::ParsedPrimaryType<'a>) -> Self {
 		use parser::ParsedPrimaryType;
 		match cst {
 			ParsedPrimaryType::Primitive(primitive) => Self::from(primitive),
 			ParsedPrimaryType::Identifier(identifier) => Self::Identifier(identifier),
-			ParsedPrimaryType::Structure(structure) => Self::Structure(structure.into_iter().map(|(name, r#type)| (name, AstTypeInner::from(r#type))).collect()),
+			ParsedPrimaryType::Structure(structure) => Self::Structure(structure.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect()),
 			ParsedPrimaryType::Variants(variants) => Self::Variants(variants),
-			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstTypeInner::from(r#type))).collect()),
+			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect()),
 			ParsedPrimaryType::Function(args, return_type, effect_set) => Self::Function(
-				args.into_iter().map(AstTypeInner::from).collect(),
-				Box::new(AstTypeInner::from(*return_type)),
+				args.into_iter().map(AstType::from).collect(),
+				Box::new(AstType::from(*return_type)),
 				effect_set
 			)
 		}
 	}
 }
 
-impl<'a> From<parser::ParsedTypeInner<'a>> for AstTypeInner<'a> {
-	fn from(cst: parser::ParsedTypeInner<'a>) -> Self {
-		match cst {
-			parser::ParsedTypeInner::PrimaryType(primary_type) => Self::from(primary_type),
-			parser::ParsedTypeInner::WithModifier(modifier, type_inner) => match modifier {
-				parser::ParsedTypeModifier::Pointer(is_mut) => Self::Pointer(Box::from(AstType {
-					is_mut,
-					type_inner: Self::from(*type_inner)
-				})),
-				parser::ParsedTypeModifier::Array(size) => Self::Array(size, Box::from(Self::from(*type_inner)))
-			}
-		}
-	}
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AstType<'a> {
-	pub is_mut: bool,
-	pub type_inner: AstTypeInner<'a>,
-}
-
 impl<'a> From<parser::ParsedType<'a>> for AstType<'a> {
 	fn from(cst: parser::ParsedType<'a>) -> Self {
-		Self { is_mut: cst.is_mut, type_inner: AstTypeInner::from(cst.type_inner) }
+		match cst {
+			parser::ParsedType::PrimaryType(primary_type) => Self::from(primary_type),
+			parser::ParsedType::WithModifier(modifier, type_inner) => match modifier {
+				parser::ParsedTypeModifier::Pointer(is_mut) => Self::Pointer(is_mut, Box::new(Self::from(*type_inner))),
+				parser::ParsedTypeModifier::Array(size) => Self::Array(size, Box::new(Self::from(*type_inner)))
+			}
+		}
 	}
 }
 
@@ -322,6 +307,7 @@ impl<'a> From<parser::ParsedHandler<'a>> for AstHandler<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstDeclaration<'a> {
+	pub is_mut: bool,
 	pub name: &'a str,
 	pub alias_type: AstType<'a>,
 	pub value: Option<AstExpression<'a>>
@@ -329,7 +315,7 @@ pub struct AstDeclaration<'a> {
 
 impl<'a> From<parser::ParsedDeclaration<'a>> for AstDeclaration<'a> {
 	fn from(cst: parser::ParsedDeclaration<'a>) -> Self {
-		Self { name: cst.name, alias_type: AstType::from(cst.alias_type), value: cst.value.map(AstExpression::from) }
+		Self { is_mut: cst.is_mut, name: cst.name, alias_type: AstType::from(cst.alias_type), value: cst.value.map(AstExpression::from) }
 	}
 }
 
@@ -419,16 +405,16 @@ impl<'a> From<parser::ParsedStatement<'a>> for AstStatement<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstOperation<'a> {
 	pub name: &'a str,
-	pub provides_types: Vec<AstTypeInner<'a>>,
-	pub resume_type: AstTypeInner<'a>
+	pub provides_types: Vec<AstType<'a>>,
+	pub resume_type: AstType<'a>
 }
 
 impl<'a> From<parser::ParsedOperation<'a>> for AstOperation<'a> {
 	fn from(cst: parser::ParsedOperation<'a>) -> Self {
 		Self {
 			name: cst.name,
-			provides_types: cst.provides_types.into_iter().map(AstTypeInner::from).collect(),
-			resume_type: AstTypeInner::from(cst.resume_type)
+			provides_types: cst.provides_types.into_iter().map(AstType::from).collect(),
+			resume_type: AstType::from(cst.resume_type)
 		}
 	}
 }
@@ -448,8 +434,8 @@ impl<'a> From<parser::ParsedEffect<'a>> for AstEffect<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstFunction<'a> {
 	name: &'a str,
-	arguments: Vec<(&'a str, AstType<'a>)>,
-	return_type: AstTypeInner<'a>,
+	arguments: Vec<(bool, &'a str, AstType<'a>)>,
+	return_type: AstType<'a>,
 	effect_set: Vec<&'a str>,
 	body: Vec<AstStatement<'a>>
 }
@@ -458,8 +444,8 @@ impl<'a> From<parser::ParsedFunction<'a>> for AstFunction<'a> {
 	fn from(cst: parser::ParsedFunction<'a>) -> Self {
 		Self {
 			name: cst.name,
-			arguments: cst.arguments.into_iter().map(|(arg_name, arg_type)| (arg_name, AstType::from(arg_type))).collect(),
-			return_type: AstTypeInner::from(cst.return_type),
+			arguments: cst.arguments.into_iter().map(|(arg_is_mut, arg_name, arg_type)| (arg_is_mut, arg_name, AstType::from(arg_type))).collect(),
+			return_type: AstType::from(cst.return_type),
 			effect_set: cst.effect_set,
 			body: cst.body.into_iter().map(AstStatement::from).collect()
 		}
@@ -469,7 +455,7 @@ impl<'a> From<parser::ParsedFunction<'a>> for AstFunction<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstProgram<'a> {
 	pub includes: Vec<&'a str>,
-	pub extern_declarations: Vec<(&'a str, AstTypeInner<'a>)>,
+	pub extern_declarations: Vec<(&'a str, AstType<'a>)>,
 	pub declarations: Vec<AstDeclaration<'a>>,
 	pub type_aliases: Vec<AstTypeAlias<'a>>,
 	pub effects: Vec<AstEffect<'a>>,
@@ -488,7 +474,7 @@ impl<'a> From<parser::ParsedProgram<'a>> for AstProgram<'a> {
 			use parser::ParsedItem;
 			match item {
 				ParsedItem::Include(path) => includes.push(path),
-				ParsedItem::ExternDeclaration(name, r#type) => extern_declarations.push((name, AstTypeInner::from(r#type))),
+				ParsedItem::ExternDeclaration(name, r#type) => extern_declarations.push((name, AstType::from(r#type))),
 				ParsedItem::Declaration(declaration) => declarations.push(AstDeclaration::from(declaration)),
 				ParsedItem::TypeAlias(declaration) => type_aliases.push(AstTypeAlias::from(declaration)),
 				ParsedItem::Effect(effect) => effects.push(AstEffect::from(effect)),

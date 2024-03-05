@@ -49,10 +49,10 @@ impl From<&str> for ParsedPrimitiveType {
 pub enum ParsedPrimaryType<'a> {
 	Primitive(ParsedPrimitiveType),
 	Identifier(&'a str),
-	Structure(Vec<(&'a str, ParsedTypeInner<'a>)>),
+	Structure(Vec<(&'a str, ParsedType<'a>)>),
 	Variants(Vec<&'a str>),
-	Union(Vec<(&'a str, ParsedTypeInner<'a>)>),
-	Function(Vec<ParsedTypeInner<'a>>, Box<ParsedTypeInner<'a>>, Vec<&'a str>)
+	Union(Vec<(&'a str, ParsedType<'a>)>),
+	Function(Vec<ParsedType<'a>>, Box<ParsedType<'a>>, Vec<&'a str>)
 }
 
 impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
@@ -63,7 +63,7 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
 			Rule::structure_type => Self::Structure(source.into_inner().map(|entry| {
 				let mut inner = entry.into_inner();
 				let entry_name = inner.next().unwrap().as_str().trim();
-				let entry_type = ParsedTypeInner::from(inner.next().unwrap().into_inner());
+				let entry_type = ParsedType::from(inner.next().unwrap().into_inner());
 				(entry_name, entry_type)
 			}).collect()),
 			Rule::variants_type => Self::Variants(source.into_inner().map(|variant|
@@ -72,13 +72,13 @@ impl<'a> From<Pair<'a, Rule>> for ParsedPrimaryType<'a> {
 			Rule::union_type => Self::Union(source.into_inner().map(|entry| {
 				let mut inner = entry.into_inner();
 				let entry_name = inner.next().unwrap().as_str().trim();
-				let entry_type = ParsedTypeInner::from(inner.next().unwrap().into_inner());
+				let entry_type = ParsedType::from(inner.next().unwrap().into_inner());
 				(entry_name, entry_type)
 			}).collect()),
 			Rule::function_type => {
 				let mut inner = source.into_inner();
-				let args = inner.next().unwrap().into_inner().map(|r#type| ParsedTypeInner::from(r#type.into_inner())).collect();
-				let return_type = Box::new(ParsedTypeInner::from(inner.next().unwrap().into_inner()));
+				let args = inner.next().unwrap().into_inner().map(|r#type| ParsedType::from(r#type.into_inner())).collect();
+				let return_type = Box::new(ParsedType::from(inner.next().unwrap().into_inner()));
 				let effect_set = inner.next().unwrap().into_inner().map(|effect| effect.as_str()).collect();
 				Self::Function(args, return_type, effect_set)
 			},
@@ -94,12 +94,12 @@ pub enum ParsedTypeModifier {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ParsedTypeInner<'a> {
+pub enum ParsedType<'a> {
 	PrimaryType(ParsedPrimaryType<'a>),
-	WithModifier(ParsedTypeModifier, Box<ParsedTypeInner<'a>>)
+	WithModifier(ParsedTypeModifier, Box<ParsedType<'a>>)
 }
 
-impl<'a> From<Pairs<'a, Rule>> for ParsedTypeInner<'a> {
+impl<'a> From<Pairs<'a, Rule>> for ParsedType<'a> {
 	fn from(source: Pairs<'a, Rule>) -> Self {
 		let mut modifiers = Vec::new();
 		for pair in source {
@@ -116,24 +116,10 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedTypeInner<'a> {
 					}
 					return result;
 				},
-				_ => unreachable!()
+				_ => unreachable!("{:?}", pair)
 			}
 		}
 		unreachable!()
-	}
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ParsedType<'a> {
-	pub is_mut: bool,
-	pub type_inner: ParsedTypeInner<'a>
-}
-
-impl<'a> From<Pairs<'a, Rule>> for ParsedType<'a> {
-	fn from(mut source: Pairs<'a, Rule>) -> Self {
-		let is_mut = source.next().unwrap().as_str().trim() == "mutable";
-		let type_inner = ParsedTypeInner::from(source.next().unwrap().into_inner());
-		Self { is_mut, type_inner }
 	}
 }
 
@@ -418,6 +404,7 @@ pub type ParsedExpression<'a> = ParsedExpressionLevelOr<'a>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedDeclaration<'a> {
+	pub is_mut: bool,
 	pub name: &'a str,
 	pub alias_type: ParsedType<'a>,
 	pub value: Option<ParsedExpression<'a>>
@@ -425,10 +412,11 @@ pub struct ParsedDeclaration<'a> {
 
 impl<'a> From<Pairs<'a, Rule>> for ParsedDeclaration<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
+		let is_mut = source.next().unwrap().as_str().trim() == "mutable";
 		let name = source.next().unwrap().as_str().trim();
 		let alias_type = ParsedType::from(source.next().unwrap().into_inner());
 		let value = source.next().map(Pair::into_inner).map(ParsedExpression::from);
-		Self { name, alias_type, value }
+		Self { is_mut, name, alias_type, value }
 	}
 }
 
@@ -674,17 +662,17 @@ impl<'a> From<Pair<'a, Rule>> for ParsedStatement<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedOperation<'a> {
 	pub name: &'a str,
-	pub provides_types: Vec<ParsedTypeInner<'a>>,
-	pub resume_type: ParsedTypeInner<'a>
+	pub provides_types: Vec<ParsedType<'a>>,
+	pub resume_type: ParsedType<'a>
 }
 
 impl<'a> From<Pairs<'a, Rule>> for ParsedOperation<'a> {
 	fn from(mut source: Pairs<'a, Rule>) -> Self {
 		let name = source.next().unwrap().as_str().trim();
 		let provides_types = source.next().unwrap().into_inner().map(|t|
-			ParsedTypeInner::from(t.into_inner())
+			ParsedType::from(t.into_inner())
 		).collect();
-		let resume_type = ParsedTypeInner::from(source.next().unwrap().into_inner());
+		let resume_type = ParsedType::from(source.next().unwrap().into_inner());
 		Self { name, provides_types, resume_type }
 	}
 }
@@ -708,8 +696,8 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedEffect<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedFunction<'a> {
 	pub name: &'a str,
-	pub arguments: Vec<(&'a str, ParsedType<'a>)>,
-	pub return_type: ParsedTypeInner<'a>,
+	pub arguments: Vec<(bool, &'a str, ParsedType<'a>)>,
+	pub return_type: ParsedType<'a>,
 	pub effect_set: Vec<&'a str>,
 	pub body: Vec<ParsedStatement<'a>>
 }
@@ -719,12 +707,13 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedFunction<'a> {
 		let name = source.next().unwrap().as_str().trim();
 		let mut arguments = Vec::new();
 		for mut argument in source.next().unwrap().into_inner().map(Pair::into_inner) {
+			let arg_is_mut = source.next().unwrap().as_str().trim() == "mutable";
 			let arg_name = argument.next().unwrap().as_str().trim();
 			let arg_type = ParsedType::from(argument.next().unwrap().into_inner());
-			arguments.push((arg_name, arg_type));
+			arguments.push((arg_is_mut, arg_name, arg_type));
 		}
 		let arguments = arguments;
-		let return_type = ParsedTypeInner::from(source.next().unwrap().into_inner());
+		let return_type = ParsedType::from(source.next().unwrap().into_inner());
 		let effect_set = source.next().unwrap().into_inner().map(|effect| effect.as_str()).collect();
 		let body = source.next().unwrap().into_inner().map(|statement| ParsedStatement::from(statement.into_inner().next().unwrap())).collect();
 		Self { name, arguments, return_type, effect_set, body }
@@ -734,7 +723,7 @@ impl<'a> From<Pairs<'a, Rule>> for ParsedFunction<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedItem<'a> {
 	Include(&'a str),
-	ExternDeclaration(&'a str, ParsedTypeInner<'a>),
+	ExternDeclaration(&'a str, ParsedType<'a>),
 	Declaration(ParsedDeclaration<'a>),
 	TypeAlias(ParsedTypeAlias<'a>),
 	Effect(ParsedEffect<'a>),
@@ -748,7 +737,7 @@ impl<'a> From<Pair<'a, Rule>> for ParsedItem<'a> {
 			Rule::extern_declaration => {
 				let mut inner = source.into_inner();
 				let name = inner.next().unwrap().as_str().trim();
-				let r#type = ParsedTypeInner::from(inner.next().unwrap().into_inner());
+				let r#type = ParsedType::from(inner.next().unwrap().into_inner());
 				Self::ExternDeclaration(name, r#type)
 			},
 			Rule::declaration => Self::Declaration(ParsedDeclaration::from(source.into_inner())),
