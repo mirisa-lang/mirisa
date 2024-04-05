@@ -1,6 +1,6 @@
-include stdio
+extern puts: function([]c_char) -> unit
 
-let msg: *char = "say gex"
+let msg: []c_char = "say gex"
 
 function main() -> i32 do
     puts(msg)

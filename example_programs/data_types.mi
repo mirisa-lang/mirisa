@@ -1,33 +1,35 @@
-alias ColorVariant = variants
-    red,
-    green,
-    blue
+variants colorVariant
+    Red,
+    Green,
+    Blue
 end
 
-alias Tag = variants
-    Tag_color,
-    Tag_rgb
+variants colorTag
+    ColorTagColor,
+    ColorTagRgb
 end
 
-alias Color = structure
-    tag: Tag,
-    color: union
-        color: ColorVariant,
-        rgb: u16
+union colorUnion
+    color: colorVariant,
+    rgb: u16
+end
+
+record color
+    tag: colorTag,
+    color: colorUnion
+end
+
+function rgb_from_variant(color: colorVariant) -> u16 do
+    if color = Red then return 63488
+    elseif color = Green then return 2016
+    elseif color = Blue then return 31
     end
 end
 
-function rgb_from_variant(color: ColorVariant) -> u16 do
-    if color = red then return 63488
-    elseif color = green then return 2016
-    elseif color = blue then return 31
-    end
-end
-
-function rgbize(color: Color) -> Color do
-    if color.tag = Tag_color then
-        return structure
-            tag = Tag_rgb,
+function rgbize(color: color) -> color do
+    if color.tag = ColorTagColor then
+        return record
+            tag = ColorTagRgb,
             color = union rgb = rgb_from_variant(color.color.color) end
         end
     else return color end

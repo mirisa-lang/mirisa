@@ -1,10 +1,14 @@
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+gnl = _{ "\r" ~ "\n"? | "\n" | ";" }
+
+WHITESPACE = _{ " " | "\t" | "\\" ~ gnl }
 
 COMMENT = _{ "--" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 keywords = {
     "var"
   | "const"
+  | "false"
+  | "true"
   | "unit"
   | "never"
   | "end"
@@ -22,7 +26,7 @@ keywords = {
   | "else"
   | "while"
   | "begin"
-  | "structure"
+  | "record"
   | "variants"
   | "union"
   | "type"
@@ -42,6 +46,8 @@ integer = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 float = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 
+bool = { "false" | "true" }
+
 char   = ${ "'" ~ char_c ~ "'" }
 char_c =  {
     !("\"" | "\\") ~ ANY
@@ -60,29 +66,34 @@ char_s =  {
 
 unit = { "unit" }
 
-literal = { integer | float | char | string | unit }
+literal = { integer | float | bool | char | string | unit }
 
 primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
   | ("i" | "u" | "f") ~ ("32" | "64")
   | "usize"
-  | "char"
+  | "c_int"
+  | "c_char"
+  | "boolean"
   | "unit"
+  | "never"
 }
 
 structure_type_entry = { identifier ~ ":" ~ mirisa_type }
 
-structure_type = { "structure" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
+structure_type = { "record" ~ identifier ~ gnl* ~ (structure_type_entry ~ ("," ~ gnl* ~ structure_type_entry)*)? ~ gnl* ~ "end" }
 
-variants_type = { "variants" ~ (identifier ~ ("," ~ identifier)*)? ~ "end" }
+variants_type = { "variants" ~ identifier ~ gnl* ~ (identifier ~ ("," ~ gnl* ~ identifier)*)? ~ gnl* ~ "end" }
 
-union_type = { "union" ~ (structure_type_entry ~ ("," ~ structure_type_entry)*)? ~ "end" }
+union_type = { "union" ~ identifier ~ gnl* ~ (structure_type_entry ~ ("," ~ gnl* ~ structure_type_entry)*)? ~ gnl* ~ "end" }
+
+adt_declaration = { structure_type | variants_type | union_type }
 
 operation_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
 
 operation = { identifier ~ "(" ~ operation_args ~ ")" ~ "->" ~ mirisa_type }
 
-effect = { "effect" ~ identifier ~ (operation ~ ("," ~ operation)*)? ~ "end" }
+effect = { "effect" ~ identifier ~ gnl* ~ (operation ~ ("," ~ gnl* ~ operation)*)? ~ gnl* ~ "end" }
 
 function_type_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
 
@@ -90,25 +101,27 @@ varargs = { "..." }
 
 function_type = { "function" ~ "(" ~ (varargs | function_type_args) ~ ")" ~ "->" ~ mirisa_type ~ effect_set }
 
-primary_type = { primitive_type | identifier | structure_type | variants_type | union_type | function_type }
+primary_type = { primitive_type | identifier | function_type }
 
 is_mut = { "mutable"? }
 
 pointer = { "*" ~ is_mut }
 
-array_t = { "[" ~ integer? ~ "]" }
+array_size = { integer? }
 
-type_modifier = _{ pointer+ | array_t+ }
+array_t = { "[" ~ array_size ~ "]" ~ is_mut }
 
-mirisa_type = { type_modifier? ~ primary_type }
+type_modifier = _{ (pointer | array_t)* }
+
+mirisa_type = { type_modifier ~ primary_type }
 
 array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 
 structure_entry = { identifier ~ "=" ~ expression }
 
-structure = { "structure" ~ (structure_entry ~ ("," ~ structure_entry)*)? ~ "end" }
+structure = { "record" ~ gnl* ~ (structure_entry ~ ("," ~ gnl* ~ structure_entry)*)? ~ gnl* ~ "end" }
 
-union = { "union" ~ structure_entry ~ "end" }
+union = { "union" ~ gnl* ~ structure_entry ~ gnl* ~ "end" }
 
 primary_expression = _{ literal | identifier | array | structure | union | "(" ~ expression ~ ")" }
 
@@ -150,8 +163,6 @@ expression = _{ expression_level_or }
 
 declaration = { "let" ~ is_mut ~ identifier ~ ":" ~ mirisa_type ~ ("=" ~ expression)? }
 
-type_alias = { "alias" ~ identifier ~ "=" ~ mirisa_type }
-
 op = _{ op_level_add | op_level_mul }
 
 reassignment_op = @{ (op | ":") ~ "=" }
@@ -164,7 +175,7 @@ lexpression = { lexpression_inner | "(" ~ lexpression ~ ")" }
 
 reassignment = { lexpression ~ reassignment_op ~ expression }
 
-body = { statement* }
+body = { gnl* ~ (statement ~ gnl+)* ~ statement? }
 
 if_then = { "then" ~ body }
 
@@ -192,9 +203,9 @@ operation_handler = {
     identifier ~ "(" ~ handler_args ~ ")" ~ body ~ "end"
 }
 
-handler = { "handle" ~ identifier ~ operation_handler* }
+handler = { "handle" ~ identifier ~ gnl* ~ (operation_handler ~ gnl*)* }
 
-mirisa_try = { "try" ~ body ~ handler+ ~ "end" }
+mirisa_try = { "try" ~ body ~ (handler ~ gnl*)+ ~ "end" }
 
 block = { "begin" ~ body ~ "end" }
 
@@ -206,7 +217,6 @@ mirisa_continue = { "continue" }
 
 statement = {
     declaration
-  | type_alias
   | reassignment
   | mirisa_if
   | mirisa_while
@@ -221,20 +231,18 @@ statement = {
 
 include_path = ${ (ASCII_ALPHANUMERIC | "\\ ")+ ~ ("/" ~ (ASCII_ALPHANUMERIC | "\\ ")+)* }
 
-include = { "include" ~ include_path }
-
 extern_declaration = { "extern" ~ identifier ~ ":" ~ mirisa_type }
 
 function_arg = { is_mut ~ identifier ~ ":" ~ mirisa_type }
 
 function_args = { (function_arg ~ ("," ~ function_arg)*)? }
 
-effect_set = { ("&" ~ "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}")? }
+effect_set = { ("&" ~ (identifier | "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}"))? }
 
 function = {
     "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ "->" ~ mirisa_type ~ effect_set ~ "do" ~ body ~ "end"
 }
 
-item = _{ include | extern_declaration | declaration | type_alias | effect | function }
+item = _{ extern_declaration | adt_declaration | declaration | effect | function }
 
-program = _{ SOI ~ item* ~ &EOI }
+program = _{ SOI ~ gnl* ~ (item ~ gnl+)* ~ item? ~ &EOI }

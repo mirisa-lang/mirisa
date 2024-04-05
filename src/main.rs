@@ -1,5 +1,6 @@
 mod parser;
 mod ast;
+mod typed_ast;
 
 use std::io::{self, Read, stdin};
 

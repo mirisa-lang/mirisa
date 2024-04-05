@@ -1,7 +1,7 @@
-include stdio
+extern puts: function([]c_char) -> unit
 
 effect Exception
-    throw(*char) -> unit
+    throw([]c_char) -> never
 end
 
 function main() -> i32 do
@@ -9,11 +9,10 @@ function main() -> i32 do
         puts("say gex")
         throw("error occurred")
         puts("not printed")
-    handle Exception
-        throw(msg)
-            printf("exception threw: %s\n", msg)
-            return 1
-        end
-    end
+    handle Exception throw(msg)
+        puts("exception threw:")
+        puts(msg)
+        return 1
+    end end
     return 0
 end

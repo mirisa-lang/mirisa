@@ -1,4 +1,4 @@
-include stdio
+include stdio -- todo: change to externs
 
 function factorial(n: i32) -> i32 do
     if n = 0 then return 1

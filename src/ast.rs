@@ -13,15 +13,15 @@ pub enum AstType<'a> {
 	U64,
 	F64,
 	Usize,
-	Char,
+	CInt,
+	CChar,
+	Boolean,
 	Unit,
+	Never,
 	Identifier(&'a str),
-	Structure(Vec<(&'a str, AstType<'a>)>),
-	Variants(Vec<&'a str>),
-	Union(Vec<(&'a str, AstType<'a>)>),
 	Function(Option<Vec<AstType<'a>>>, Box<AstType<'a>>, Vec<&'a str>),
 	Pointer(bool, Box<AstType<'a>>),
-	Array(Option<u64>, Box<AstType<'a>>)
+	Array(bool, Option<u64>, Box<AstType<'a>>)
 }
 
 impl From<parser::ParsedPrimitiveType> for AstType<'_> {
@@ -39,8 +39,11 @@ impl From<parser::ParsedPrimitiveType> for AstType<'_> {
 			ParsedPrimitiveType::U64 => Self::U64,
 			ParsedPrimitiveType::F64 => Self::F64,
 			ParsedPrimitiveType::Usize => Self::Usize,
-			ParsedPrimitiveType::Char => Self::Char,
-			ParsedPrimitiveType::Unit => Self::Unit
+			ParsedPrimitiveType::CInt => Self::CInt,
+			ParsedPrimitiveType::CChar => Self::CChar,
+			ParsedPrimitiveType::Boolean => Self::Boolean,
+			ParsedPrimitiveType::Unit => Self::Unit,
+			ParsedPrimitiveType::Never => Self::Never
 		}
 	}
 }
@@ -51,9 +54,6 @@ impl<'a> From<parser::ParsedPrimaryType<'a>> for AstType<'a> {
 		match cst {
 			ParsedPrimaryType::Primitive(primitive) => Self::from(primitive),
 			ParsedPrimaryType::Identifier(identifier) => Self::Identifier(identifier),
-			ParsedPrimaryType::Structure(structure) => Self::Structure(structure.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect()),
-			ParsedPrimaryType::Variants(variants) => Self::Variants(variants),
-			ParsedPrimaryType::Union(union) => Self::Union(union.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect()),
 			ParsedPrimaryType::Function(args, return_type, effect_set) => Self::Function(
 				args.map(|a| a.into_iter().map(AstType::from).collect()),
 				Box::new(AstType::from(*return_type)),
@@ -69,7 +69,7 @@ impl<'a> From<parser::ParsedType<'a>> for AstType<'a> {
 			parser::ParsedType::PrimaryType(primary_type) => Self::from(primary_type),
 			parser::ParsedType::WithModifier(modifier, type_inner) => match modifier {
 				parser::ParsedTypeModifier::Pointer(is_mut) => Self::Pointer(is_mut, Box::new(Self::from(*type_inner))),
-				parser::ParsedTypeModifier::Array(size) => Self::Array(size, Box::new(Self::from(*type_inner)))
+				parser::ParsedTypeModifier::Array(is_mut, size) => Self::Array(is_mut, size, Box::new(Self::from(*type_inner)))
 			}
 		}
 	}
@@ -79,7 +79,7 @@ impl<'a> From<parser::ParsedType<'a>> for AstType<'a> {
 pub enum AstExpression<'a> {
 	Integer(i128),
 	Float(f64),
-	Char(i8),
+	Boolean(bool),
 	String(&'a str),
 	Unit,
 	Identifier(&'a str),
@@ -112,9 +112,10 @@ impl<'a> From<parser::ParsedLiteral<'a>> for AstExpression<'a> {
 		match cst {
 			parser::ParsedLiteral::Integer(integer) => Self::Integer(integer),
 			parser::ParsedLiteral::Float(float) => Self::Float(float),
-			parser::ParsedLiteral::Char(character) => Self::Char(character),
+			parser::ParsedLiteral::Boolean(boolean) => Self::Boolean(boolean),
+			parser::ParsedLiteral::Char(character) => Self::Integer(character as i128),
 			parser::ParsedLiteral::String(string) => Self::String(string),
-			parser::ParsedLiteral::Unit => Self::Unit,
+			parser::ParsedLiteral::Unit => Self::Unit
 		}
 	}
 }
@@ -321,8 +322,8 @@ impl<'a> From<parser::ParsedDeclaration<'a>> for AstDeclaration<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstTypeAlias<'a> {
-	name: &'a str,
-	alias_type: AstType<'a>
+	pub name: &'a str,
+	pub alias_type: AstType<'a>
 }
 
 impl<'a> From<parser::ParsedTypeAlias<'a>> for AstTypeAlias<'a> {
@@ -334,7 +335,6 @@ impl<'a> From<parser::ParsedTypeAlias<'a>> for AstTypeAlias<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement<'a> {
 	Declaration(AstDeclaration<'a>),
-	TypeAlias(AstTypeAlias<'a>),
 	Reassignment{
 		lexpression: AstLexpression<'a>,
 		reassignment_op: AstReassignmentOp,
@@ -369,7 +369,6 @@ impl<'a> From<parser::ParsedStatement<'a>> for AstStatement<'a> {
 	fn from(cst: parser::ParsedStatement<'a>) -> Self {
 		match cst {
 			parser::ParsedStatement::Declaration(statement) => Self::Declaration(AstDeclaration::from(statement)),
-			parser::ParsedStatement::TypeAlias(statement) => Self::TypeAlias(AstTypeAlias::from(statement)),
 			parser::ParsedStatement::Reassignment(statement) => Self::Reassignment {
 				lexpression: AstLexpression::from(statement.lexpression),
 				reassignment_op: AstReassignmentOp::from(statement.reassignment_op),
@@ -454,33 +453,36 @@ impl<'a> From<parser::ParsedFunction<'a>> for AstFunction<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstProgram<'a> {
-	pub includes: Vec<&'a str>,
 	pub extern_declarations: Vec<(&'a str, AstType<'a>)>,
+	pub structures: Vec<(&'a str, Vec<(&'a str, AstType<'a>)>)>,
+	pub variants: Vec<(&'a str, Vec<&'a str>)>,
+	pub unions: Vec<(&'a str, Vec<(&'a str, AstType<'a>)>)>,
 	pub declarations: Vec<AstDeclaration<'a>>,
-	pub type_aliases: Vec<AstTypeAlias<'a>>,
 	pub effects: Vec<AstEffect<'a>>,
 	pub functions: Vec<AstFunction<'a>>
 }
 
 impl<'a> From<parser::ParsedProgram<'a>> for AstProgram<'a> {
 	fn from(cst: parser::ParsedProgram<'a>) -> Self {
-		let mut includes = Vec::new();
 		let mut extern_declarations = Vec::new();
+		let mut structures = Vec::new();
+		let mut variants = Vec::new();
+		let mut unions = Vec::new();
 		let mut declarations = Vec::new();
-		let mut type_aliases = Vec::new();
 		let mut effects = Vec::new();
 		let mut functions = Vec::new();
 		for item in cst.0 {
 			use parser::ParsedItem;
 			match item {
-				ParsedItem::Include(path) => includes.push(path),
 				ParsedItem::ExternDeclaration(name, r#type) => extern_declarations.push((name, AstType::from(r#type))),
+				ParsedItem::Structure(name, fields) => structures.push((name, fields.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect())),
+				ParsedItem::Variants(name, variants_) => variants.push((name, variants_)),
+				ParsedItem::Union(name, fields) => unions.push((name, fields.into_iter().map(|(name, r#type)| (name, AstType::from(r#type))).collect())),
 				ParsedItem::Declaration(declaration) => declarations.push(AstDeclaration::from(declaration)),
-				ParsedItem::TypeAlias(declaration) => type_aliases.push(AstTypeAlias::from(declaration)),
 				ParsedItem::Effect(effect) => effects.push(AstEffect::from(effect)),
 				ParsedItem::Function(function) => functions.push(AstFunction::from(function)),
 			};
 		}
-		Self { includes, extern_declarations, declarations, type_aliases, effects, functions }
+		Self { extern_declarations, structures, variants, unions, declarations, effects, functions }
 	}
 }
