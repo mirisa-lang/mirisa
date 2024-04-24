@@ -1,7 +1,7 @@
-extern puts: function([]c_char) -> unit
+extern puts: function([]u8) -> unit
 
 effect Exception
-    throw([]c_char) -> never
+    throw([]u8) -> never
 end
 
 function main() -> i32 do

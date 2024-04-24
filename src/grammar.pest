@@ -72,8 +72,6 @@ primitive_type = @{
     ("i" | "u") ~ ("8" | "16")
   | ("i" | "u" | "f") ~ ("32" | "64")
   | "usize"
-  | "c_int"
-  | "c_char"
   | "boolean"
   | "unit"
   | "never"
@@ -85,9 +83,7 @@ structure_type = { "record" ~ identifier ~ gnl* ~ (structure_type_entry ~ ("," ~
 
 variants_type = { "variants" ~ identifier ~ gnl* ~ (identifier ~ ("," ~ gnl* ~ identifier)*)? ~ gnl* ~ "end" }
 
-union_type = { "union" ~ identifier ~ gnl* ~ (structure_type_entry ~ ("," ~ gnl* ~ structure_type_entry)*)? ~ gnl* ~ "end" }
-
-adt_declaration = { structure_type | variants_type | union_type }
+adt_declaration = { structure_type | variants_type }
 
 operation_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
 
@@ -97,9 +93,7 @@ effect = { "effect" ~ identifier ~ gnl* ~ (operation ~ ("," ~ gnl* ~ operation)*
 
 function_type_args = { (mirisa_type ~ ("," ~ mirisa_type)*)? }
 
-varargs = { "..." }
-
-function_type = { "function" ~ "(" ~ (varargs | function_type_args) ~ ")" ~ "->" ~ mirisa_type ~ effect_set }
+function_type = { "function" ~ "(" ~ function_type_args ~ ")" ~ "->" ~ mirisa_type ~ effect_set ~ "end" }
 
 primary_type = { primitive_type | identifier | function_type }
 
@@ -121,9 +115,7 @@ structure_entry = { identifier ~ "=" ~ expression }
 
 structure = { "record" ~ gnl* ~ (structure_entry ~ ("," ~ gnl* ~ structure_entry)*)? ~ gnl* ~ "end" }
 
-union = { "union" ~ gnl* ~ structure_entry ~ gnl* ~ "end" }
-
-primary_expression = _{ literal | identifier | array | structure | union | "(" ~ expression ~ ")" }
+primary_expression = _{ literal | identifier | array | structure | "(" ~ expression ~ ")" }
 
 call = { "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
@@ -143,7 +135,7 @@ expression_level_prefix = { op_level_prefix* ~ expression_level_bottom }
 
 expression_level_as = { expression_level_prefix ~ ("as" ~ mirisa_type)* }
 
-op_level_mul = { "*" | "/" | "%" }
+op_level_mul = { "*" | "/" | "rem" }
 
 expression_level_mul = { expression_level_as ~ (op_level_mul ~ expression_level_as)* }
 
@@ -237,7 +229,7 @@ function_arg = { is_mut ~ identifier ~ ":" ~ mirisa_type }
 
 function_args = { (function_arg ~ ("," ~ function_arg)*)? }
 
-effect_set = { ("&" ~ (identifier | "{" ~ (identifier ~ ("," ~ identifier)*)? ~ "}"))? }
+effect_set = { ("&" ~ (identifier | "<" ~ (identifier ~ ("," ~ identifier)*)? ~ ">"))? }
 
 function = {
     "function" ~ identifier ~ "(" ~ function_args ~ ")" ~ "->" ~ mirisa_type ~ effect_set ~ "do" ~ body ~ "end"

@@ -1,8 +1,5 @@
-extern puts: function([]c_char) -> unit
+let msg: []u8 = "say gex"
 
-let msg: []c_char = "say gex"
-
-function main() -> i32 do
-    puts(msg)
-    return 0
+function main() -> unit & consoleIo do
+    println(msg)
 end
