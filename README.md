@@ -1,6 +1,8 @@
 # mirisa (early WIP)
 
-Well… it's just an unfinished PoC c with algebraic effects and cute syntax to c translator for now…
+Well… it's just an unfinished PoC translator to zig for now…
+
+and it will stay unfinished because i am rewriting it in haskell.
 
 ## License
 
