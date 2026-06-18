@@ -4,6 +4,8 @@ Well… it's just an unfinished PoC translator to zig for now…
 
 and it will stay unfinished because i am rewriting it in haskell.
 
+Said I, and didn't touch this project for 2 years 😭😭😭.
+
 ## License
 
 Licensed under either of
